@@ -17,6 +17,8 @@ import torchvision.transforms as transforms
 
 DATA_DIR = "C:\\Users\\vitko\\Desktop\\CVR\\Data\\labeled"
 BACKBONE = 'resnet34'
+
+
 # preprocess_input = sm.get_preprocessing(BACKBONE)
 
 
@@ -82,17 +84,31 @@ class LitUnet(pl.LightningModule):
         optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
         return optimizer
 
+    def fit_model(self, train_dataloader, val_dataloader):
+        trainer = pl.Trainer(
+            max_epochs=5,
+        )
+
+        trainer.fit(
+            self,
+            train_dataloaders=train_dataloader,
+            val_dataloaders=val_dataloader,
+        )
+
+
+def prepare_data():
+    dataset = ImageDataset(DATA_DIR)
+    train_size = int(0.8 * len(dataset))
+    train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, len(dataset) - train_size])
+
+    train_dataloader = DataLoader(train_dataset, shuffle=True)
+    val_dataloader = DataLoader(val_dataset, shuffle=False)
+
+    return train_dataloader, val_dataloader
 
 # images = load_images('DELISA', 'img.png')
 # masks = load_images('DELISA', 'mask.png')
 # x_train, x_val, y_train, y_val = train_test_split(images, masks, test_size=0.2, random_state=42)
-
-dataset = ImageDataset(DATA_DIR)
-train_size = int(0.8 * len(dataset))
-train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, len(dataset) - train_size])
-
-train_dataloader = DataLoader(train_dataset, shuffle=True)
-val_dataloader = DataLoader(val_dataset, shuffle=False)
 
 # model = smp.Unet(
 #     encoder_name="resnet34",
@@ -105,17 +121,12 @@ val_dataloader = DataLoader(val_dataset, shuffle=False)
 # loss = torch.nn.CrossEntropyLoss()
 # optimizer = torch.optim.Adam([dict(params=model.parameters(), lr=0.0001)])
 
-model = LitUnet()
 
-trainer = pl.Trainer(
-    max_epochs=5,
-)
-
-trainer.fit(
-    model,
-    train_dataloaders=train_dataloader,
-    val_dataloaders=val_dataloader,
-)
+if __name__ == '__main__':
+    model = LitUnet()
+    train, val = prepare_data()
+    model.fit_model(train, val)
+    torch.save(model.state_dict(), 'segmentation_model.pth')
 
 # x_train = preprocess_input(x_train)
 # x_val = preprocess_input(x_val)
@@ -132,5 +143,3 @@ trainer.fit(
 #    epochs=10,
 #    validation_data=(x_val, y_val)
 # )
-
-torch.save(model.state_dict(), 'segmentation_model.pth')
