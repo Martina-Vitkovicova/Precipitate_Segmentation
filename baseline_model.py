@@ -1,6 +1,9 @@
 import glob
 import os
+import pathlib
+
 import cv2
+import imageio
 import numpy as np
 import segmentation_models_pytorch
 from sklearn.model_selection import train_test_split
@@ -14,8 +17,14 @@ from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 import segmentation_models_pytorch as smp
 import torchvision.transforms as transforms
+import matplotlib.pyplot as plt
 
-DATA_DIR = "C:\\Users\\vitko\\Desktop\\CVR\\Data\\labeled"
+from denoiseg import instance_analysis as ia
+from denoiseg import evaluation as ev
+import denoiseg.visualization as vis
+from denoiseg import image_utils as iu
+
+DATA_DIR = "C:\\Users\\vitko\\Desktop\\CVR\\Data"
 BACKBONE = 'resnet34'
 
 
@@ -28,10 +37,12 @@ def load_images(path, img_or_mask):
         if subdir.startswith('DELISA'):
             img_path = os.path.join(path, subdir, img_or_mask)
             if os.path.isfile(img_path):
+                img = np.squeeze(imageio.imread(img_path))
                 # print(img_path)
-                img = Image.open(img_path).convert("L")
-                img = transforms.ToTensor()(img)
-                img = img.to(torch.float32)
+                # img = Image.open(img_path).convert("L")
+                # img = transforms.ToTensor()(img)
+                # img = img.to(torch.float32)
+                # img = np.squeeze(np.float32(img))
                 imgs.append(img)
     # Convert list to array for machine learning processing
     # imgs = np.array(imgs)
@@ -97,7 +108,7 @@ class LitUnet(pl.LightningModule):
 
 
 def prepare_data():
-    dataset = ImageDataset(DATA_DIR)
+    dataset = ImageDataset(DATA_DIR+"\\labeled")
     train_size = int(0.8 * len(dataset))
     train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, len(dataset) - train_size])
 
@@ -105,6 +116,50 @@ def prepare_data():
     val_dataloader = DataLoader(val_dataset, shuffle=False)
 
     return train_dataloader, val_dataloader
+
+# gt = ground truth
+# TODO: patches
+
+
+def evaluate_model():
+    root = pathlib.Path('../Data/test/')
+    gt_paths = [os.path.join(root, subdir, "mask.png") for subdir in os.listdir(root)]
+    img_paths = [os.path.join(root, subdir, "img.png") for subdir in os.listdir(root)]
+    # img_paths = [root / f"{p.stem}.png" for p in gt_paths]
+
+    imgs_test = list(map(iu.load_image, img_paths))
+    mask_test = list(map(iu.load_mask, gt_paths))
+
+    checkpoint = torch.load('segmentation_model.pth')
+    model_s = LitUnet()
+    model_s.load_state_dict(checkpoint)
+    model_s.eval()
+
+    predictions, metrics = ev.evaluate_images(model_s, imgs_test, mask_test, device='cpu')
+
+    for i, (img, gt, pred, met) in enumerate(zip(imgs_test, mask_test, predictions, metrics)):
+
+        segms = []
+        for im in pred[1:]:
+            im = im.copy()
+            im = (im - np.min(im)) / (np.max(im) - np.min(im))
+            im[im < .5] = 0
+            im[im >= .5] = 1
+            segms.append(im)
+
+        show_imgs = [img, gt, *segms, *pred]
+        vis.plot_row(show_imgs, vmin_vmax=(0, 1), figsize=(50, 10))
+        plt.suptitle(f'Metric: {met}', y=0.72)
+        plt.tight_layout()
+        plt.show()
+
+
+if __name__ == '__main__':
+    # model = LitUnet()
+    # train, val = prepare_data()
+    # model.fit_model(train, val)
+    # torch.save(model.state_dict(), 'segmentation_model.pth')
+    evaluate_model()
 
 # images = load_images('DELISA', 'img.png')
 # masks = load_images('DELISA', 'mask.png')
@@ -120,13 +175,6 @@ def prepare_data():
 # preprocess_input = get_preprocessing_fn("resnet18", pretrained="imagenet")
 # loss = torch.nn.CrossEntropyLoss()
 # optimizer = torch.optim.Adam([dict(params=model.parameters(), lr=0.0001)])
-
-
-if __name__ == '__main__':
-    model = LitUnet()
-    train, val = prepare_data()
-    model.fit_model(train, val)
-    torch.save(model.state_dict(), 'segmentation_model.pth')
 
 # x_train = preprocess_input(x_train)
 # x_val = preprocess_input(x_val)
