@@ -1,10 +1,9 @@
 import pytorch_lightning as pl
 import segmentation_models_pytorch as smp
 import torch
+from matplotlib import pyplot as plt
 
 from dataset_preparation import prepare_data
-
-DATA_DIR = "C:\\Users\\vitko\\Desktop\\CVR\\Data"
 
 
 class LitUnet(pl.LightningModule):
@@ -20,20 +19,32 @@ class LitUnet(pl.LightningModule):
         self.loss_function = smp.losses.DiceLoss(smp.losses.BINARY_MODE, from_logits=True)
 
     def forward(self, x):
-        # x = x.permute(3, 0, 1, 2)
+        x = x.unsqueeze(1)
         return self.model(x)
 
     def training_step(self, batch, batch_idx):
         images, masks = batch
+
+        # _, (axl, axr) = plt.subplots(1, 2)
+        # axl.imshow(masks[0].squeeze(0))
+        # axr.imshow(masks[1].squeeze(0))
+        # plt.show()
+
         outputs = self(images)
-        loss = self.loss_function(outputs, masks)
+        loss = self.loss_function(outputs, masks[0])
         self.log('train_loss', loss)
         return loss
 
     def validation_step(self, batch, batch_idx):
         images, masks = batch
+
+        # _, (axl, axr) = plt.subplots(1, 2)
+        # axl.imshow(masks[0].squeeze(0))
+        # axr.imshow(masks[1].squeeze(0))
+        # plt.show()
+
         outputs = self(images)
-        loss = self.loss_function(outputs, masks)
+        loss = self.loss_function(outputs, masks[0])
         self.log('val_loss', loss)
 
     def configure_optimizers(self):
@@ -53,14 +64,8 @@ class LitUnet(pl.LightningModule):
 
 
 if __name__ == '__main__':
-    # imgs = load_images(DATA_DIR+"\\labeled", 'img.png')
     model = LitUnet()
     train, val = prepare_data()
     model.fit_model(train, val)
     torch.save(model.state_dict(), 'segmentation_model.pth')
     # evaluate_model()
-
-# images = load_images('DELISA', 'img.png')
-# masks = load_images('DELISA', 'mask.png')
-# x_train, x_val, y_train, y_val = train_test_split(images, masks, test_size=0.2, random_state=42)
-

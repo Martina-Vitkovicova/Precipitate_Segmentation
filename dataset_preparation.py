@@ -7,26 +7,39 @@ from PIL import Image
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
 import torchvision.transforms as transforms
+from denoiseg import image_utils as iu
 from denoiseg import dataset as ds
-from baseline_model import DATA_DIR
 
 
-def load_images(path, img_or_mask):
+DATA_DIR = "C:\\Users\\vitko\\Desktop\\CVR\\Data"
+
+
+def load_images(root_path):
     imgs = []
-    for subdir in os.listdir(path):
-        if subdir.startswith('DELISA'):
-            img_path = os.path.join(path, subdir, img_or_mask)
-            if os.path.isfile(img_path):
-                # img = np.squeeze(imageio.imread(img_path))
-                # print(img_path)
-                img = Image.open(img_path).convert("L")
-                # img = np.array(img, dtype=np.float32)
-                img = transforms.ToTensor()(img)
-                # img = img.squeeze(0)
-                img = img.to(torch.float32)
-                imgs.append(img)
-    imgs = np.array(imgs)
-    return imgs
+    masks = []
+    imgs_paths = list(root_path.rglob('img.png'))
+    mask_paths = [img_path.parent / "mask.png" for img_path in imgs_paths]
+
+    for img_path in imgs_paths:
+        if os.path.isfile(img_path):
+            # img = np.squeeze(imageio.imread(img_path))
+            # print(img_path)
+            img = Image.open(img_path).convert("L")
+            img = np.array(img, dtype=np.float32)
+            # img = transforms.ToTensor()(img)
+            # img = img.squeeze(0)
+            # img = img.to(torch.float32)
+            imgs.append(img)
+
+    for mask_path in mask_paths:
+        if os.path.isfile(mask_path):
+            mask = Image.open(mask_path).convert("L")
+            mask = np.array(mask, dtype=np.float32)
+            masks.append(mask)
+
+    # imgs = np.array(imgs)
+    # masks = np.array(masks)
+    return imgs, masks
 
 
 class ImageDataset(Dataset):
@@ -51,22 +64,14 @@ class ImageDataset(Dataset):
         return image_aug, label_aug
 
     def _transform(self, image, label):
+        label = np.stack([label, label])
         transformed = self.transform(image=image, masks=label)
         return transformed["image"], transformed["masks"]
 
 
 def prepare_dataset():
     data_root = pathlib.Path(DATA_DIR + "\\labeled")
-
-    # imgs_paths = list(data_root.rglob('img.png'))
-    # images = [iu.load_image(img_path) for img_path in imgs_paths]
-    #
-    # # labels-paths come from imgs_paths img_paths to ensure order
-    # mask_paths = [img_path.parent / "mask.png" for img_path in imgs_paths]
-    # masks = [iu.load_image(img_path) for img_path in mask_paths]
-
-    images = load_images(DATA_DIR + "\\labeled", 'img.png')
-    masks = load_images(DATA_DIR + "\\labeled", 'mask.png')
+    images, masks = load_images(data_root)
 
     augmentation_fn = ds.setup_augumentation(
         patch_size=256,
