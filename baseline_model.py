@@ -1,9 +1,20 @@
+import os
+import pathlib
+
+import numpy as np
 import pytorch_lightning as pl
 import segmentation_models_pytorch as smp
 import torch
 from matplotlib import pyplot as plt
+from pytorch_lightning.callbacks import ModelCheckpoint
 
-from dataset_preparation import prepare_data
+import dataset_preparation
+from dataset_preparation import prepare_dataloaders
+from denoiseg import evaluation as ev
+import denoiseg.visualization as vis
+
+DATA_DIR = "C:\\Users\\vitko\\Desktop\\CVR\\Data\\labeled"
+TEST_DIR = "C:\\Users\\vitko\\Desktop\\CVR\\Data\\test"
 
 
 class LitUnet(pl.LightningModule):
@@ -19,6 +30,7 @@ class LitUnet(pl.LightningModule):
         self.loss_function = smp.losses.DiceLoss(smp.losses.BINARY_MODE, from_logits=True)
 
     def forward(self, x):
+        """unsqueeze treba pri trenovani, ale pri evaluacii to uz nefunguje"""
         x = x.unsqueeze(1)
         return self.model(x)
 
@@ -31,6 +43,7 @@ class LitUnet(pl.LightningModule):
         # plt.show()
 
         outputs = self(images)
+        """z nejakeho dovodu masks je list s dvoma rovnakymi obrazkami"""
         loss = self.loss_function(outputs, masks[0])
         self.log('train_loss', loss)
         return loss
@@ -44,6 +57,7 @@ class LitUnet(pl.LightningModule):
         # plt.show()
 
         outputs = self(images)
+        """z nejakeho dovodu masks je list s dvoma rovnakymi obrazkami"""
         loss = self.loss_function(outputs, masks[0])
         self.log('val_loss', loss)
 
@@ -52,8 +66,11 @@ class LitUnet(pl.LightningModule):
         return optimizer
 
     def fit_model(self, train_dataloader, val_dataloader):
+        checkpoint_callback = ModelCheckpoint(dirpath='checkpoints/', filename='{epoch}-{val_loss:.2f}', save_top_k=-1,
+                                              save_weights_only=True, verbose=True)
         trainer = pl.Trainer(
-            max_epochs=5,
+            callbacks=[checkpoint_callback],
+            max_epochs=10,
         )
 
         trainer.fit(
@@ -62,10 +79,33 @@ class LitUnet(pl.LightningModule):
             val_dataloaders=val_dataloader,
         )
 
+    def evaluate_model(self):
+        root_path = pathlib.Path(TEST_DIR)
+        imgs_test, mask_test = dataset_preparation.load_images(root_path)
+
+        predictions, metrics = ev.evaluate_images(self, imgs_test, mask_test, device='cpu')
+
+        for i, (img, gt, pred, met) in enumerate(zip(imgs_test, mask_test, predictions, metrics)):
+            segms = []
+            for im in pred[1:]:
+                im = im.copy()
+                im = (im - np.min(im)) / (np.max(im) - np.min(im))
+                im[im < .5] = 0
+                im[im >= .5] = 1
+                segms.append(im)
+
+            show_imgs = [img, gt, *segms, *pred]
+            vis.plot_row(show_imgs, vmin_vmax=(0, 1), figsize=(50, 10))
+            plt.suptitle(f'Metric: {met}', y=0.72)
+            plt.tight_layout()
+            plt.show()
+
 
 if __name__ == '__main__':
+    train, val = prepare_dataloaders(DATA_DIR)
     model = LitUnet()
-    train, val = prepare_data()
     model.fit_model(train, val)
-    torch.save(model.state_dict(), 'segmentation_model.pth')
-    # evaluate_model()
+
+    model = LitUnet.load_from_checkpoint('checkpoints/epoch=9-val_loss=-0.36.ckpt')
+    model.eval()
+    model.evaluate_model()

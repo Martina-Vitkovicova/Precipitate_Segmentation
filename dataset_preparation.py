@@ -4,26 +4,21 @@ import numpy as np
 
 import torch
 from PIL import Image
+from matplotlib import pyplot as plt
 from torch.utils.data import Dataset
 from torch.utils.data import DataLoader
-import torchvision.transforms as transforms
-from denoiseg import image_utils as iu
 from denoiseg import dataset as ds
-
-
-DATA_DIR = "C:\\Users\\vitko\\Desktop\\CVR\\Data"
 
 
 def load_images(root_path):
     imgs = []
     masks = []
-    imgs_paths = list(root_path.rglob('img.png'))
-    mask_paths = [img_path.parent / "mask.png" for img_path in imgs_paths]
+    img_paths = list(root_path.rglob('img.png'))
+    mask_paths = [img_path.parent / "mask.png" for img_path in img_paths]
 
-    for img_path in imgs_paths:
+    for img_path in img_paths:
         if os.path.isfile(img_path):
             # img = np.squeeze(imageio.imread(img_path))
-            # print(img_path)
             img = Image.open(img_path).convert("L")
             img = np.array(img, dtype=np.float32)
             # img = transforms.ToTensor()(img)
@@ -37,8 +32,6 @@ def load_images(root_path):
             mask = np.array(mask, dtype=np.float32)
             masks.append(mask)
 
-    # imgs = np.array(imgs)
-    # masks = np.array(masks)
     return imgs, masks
 
 
@@ -55,10 +48,8 @@ class ImageDataset(Dataset):
     def __getitem__(self, idx):
         image = self.images[idx]
         label = self.labels[idx]
-        # print(image.shape, label.shape)
 
         image_aug, label_aug = self._transform(image, label)
-        # print(image_aug.shape(), label_aug.shape())
 
         # return image_aug, iu.label_to_classes(label_aug)
         return image_aug, label_aug
@@ -69,8 +60,8 @@ class ImageDataset(Dataset):
         return transformed["image"], transformed["masks"]
 
 
-def prepare_dataset():
-    data_root = pathlib.Path(DATA_DIR + "\\labeled")
+def prepare_dataset(data_path, show=False):
+    data_root = pathlib.Path(data_path)
     images, masks = load_images(data_root)
 
     augmentation_fn = ds.setup_augumentation(
@@ -91,20 +82,20 @@ def prepare_dataset():
         augmentation_fn
     )
 
-    # for data_dict in dataset:
-    #     _, (axl, axr) = plt.subplots(1, 2)
-    #
-    #     # images in data_dict are in channel-first order
-    #     axl.imshow(data_dict['x'][0])
-    #     axr.imshow(data_dict['y'][0])
-    #     plt.show()
+    if show:
+        for data_dict in dataset:
+            _, (axl, axr) = plt.subplots(1, 2)
+
+            # images in data_dict are in channel-first order
+            axl.imshow(data_dict['x'][0])
+            axr.imshow(data_dict['y'][0])
+            plt.show()
 
     return dataset
 
 
-def prepare_data():
-    # dataset = ImageDataset(DATA_DIR+"\\labeled")
-    dataset = prepare_dataset()
+def prepare_dataloaders(data_path):
+    dataset = prepare_dataset(data_path)
     train_size = int(0.8 * len(dataset))
     train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, len(dataset) - train_size])
 
