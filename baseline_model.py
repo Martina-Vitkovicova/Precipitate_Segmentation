@@ -12,6 +12,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint
 from torchvision import transforms
 
 import dataset_preparation
+import visualisation
 from dataset_preparation import prepare_dataloaders
 from denoiseg import evaluation as ev
 import denoiseg.visualization as vis
@@ -80,7 +81,7 @@ def evaluate_predictions(test_dir, predictions, show=True):
     imgs_test, mask_test = dataset_preparation.load_images(test_dir)
 
     if show:
-        dataset_preparation.visualise_results(test_dir, predictions)
+        visualisation.visualise_results(test_dir, predictions)
 
     evaluations = ia.evaluate_match(imgs_test, mask_test, predictions)
 
@@ -89,10 +90,10 @@ def evaluate_predictions(test_dir, predictions, show=True):
 
 
 if __name__ == '__main__':
-    # train, val = prepare_dataloaders(DATA_DIR)
-    # model = LitUnet()
-    EPOCH_NUM = 10
-    # model.fit_model(train, val, EPOCH_NUM)
+    train, val = prepare_dataloaders(DATA_DIR)
+    model = LitUnet()
+    EPOCH_NUM = 50
+    model.fit_model(train, val, EPOCH_NUM)
 
     checkpoint = list(pathlib.Path(os.getcwd() + "\\checkpoints").glob('epoch={}*'.format(EPOCH_NUM - 1)))[0]
     model = LitUnet.load_from_checkpoint(checkpoint)
