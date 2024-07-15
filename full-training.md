@@ -168,12 +168,29 @@ for i,(img,gt,pred,met) in enumerate(zip(test_x,test_y,predictions,metrics)):
         segms.append(im)
 
     show_imgs = [img,gt,segms[0]]
-    vis.plot_row(show_imgs,vmin_vmax = (0,1),figsize=(50,10))
+    vis.plot_row(show_imgs,vmin_vmax = (0,1),figsize=(50,20))
     plt.suptitle(f'Metric: {met}')
     plt.tight_layout()
     plt.show()
 ```
 
-```python
+# Evaluation
 
+The following code represent instance evalutaion with different thresholds. The results are visualized ina  form or precision recall curve.
+
+Each point represents mean evaluation for a given model across the whole test set. The evaluation encapsulates two compontens:
+- precision = TP/(TP+FN)
+- recall = TP/(TP + TN)
+- The final value $f_1$ is it's harmonic mean. 
+
+Each datapoint shows $f_1$ and $t$ which reffers the the threshold this value has been obtained with
+
+```python
+import denoiseg.instance_analysis as ia
+
+# HACK bacward compatibility problem
+preds = [p[1:] for p in predictions]
+evaluations = ia.evaluate_match(test_x,test_y,preds)
+mean_evaluations = ia.mean_evaluations(evaluations)
+vis.plot_precision_recall_curve(mean_evaluations)
 ```
