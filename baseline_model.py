@@ -1,55 +1,25 @@
-import glob
 import os
+import pathlib
+
 import cv2
 import numpy as np
-import segmentation_models_pytorch
-from sklearn.model_selection import train_test_split
-# import segmentation_models as sm
-from segmentation_models_pytorch.encoders import get_preprocessing_fn
-
+import pytorch_lightning as pl
+import segmentation_models_pytorch as smp
 import torch
 from PIL import Image
-import pytorch_lightning as pl
-from torch.utils.data import Dataset
-from torch.utils.data import DataLoader
-import segmentation_models_pytorch as smp
-import torchvision.transforms as transforms
+from matplotlib import pyplot as plt
+from pytorch_lightning.callbacks import ModelCheckpoint
+from torchvision import transforms
+
+import dataset_preparation
+import visualisation
+from dataset_preparation import prepare_dataloaders
+from denoiseg import evaluation as ev
+import denoiseg.visualization as vis
+from denoiseg import instance_analysis as ia
 
 DATA_DIR = "C:\\Users\\vitko\\Desktop\\CVR\\Data\\labeled"
-BACKBONE = 'resnet34'
-
-
-# preprocess_input = sm.get_preprocessing(BACKBONE)
-
-
-def load_images(path, img_or_mask):
-    imgs = []
-    for subdir in os.listdir(path):
-        if subdir.startswith('DELISA'):
-            img_path = os.path.join(path, subdir, img_or_mask)
-            if os.path.isfile(img_path):
-                # print(img_path)
-                img = Image.open(img_path).convert("L")
-                img = transforms.ToTensor()(img)
-                img = img.to(torch.float32)
-                imgs.append(img)
-    # Convert list to array for machine learning processing
-    # imgs = np.array(imgs)
-    return imgs
-
-
-class ImageDataset(Dataset):
-    def __init__(self, img_dir, transform=None):
-        self.img_dir = img_dir
-        self.transform = transform
-        self.images = load_images(img_dir, "img.png")
-        self.masks = load_images(img_dir, "mask.png")
-
-    def __len__(self):
-        return len(self.masks)
-
-    def __getitem__(self, idx):
-        return self.images[idx], self.masks[idx]
+TEST_DIR = "C:\\Users\\vitko\\Desktop\\CVR\\Data\\test"
 
 
 class LitUnet(pl.LightningModule):
@@ -65,81 +35,68 @@ class LitUnet(pl.LightningModule):
         self.loss_function = smp.losses.DiceLoss(smp.losses.BINARY_MODE, from_logits=True)
 
     def forward(self, x):
+        x = x.unsqueeze(1)
         return self.model(x)
 
     def training_step(self, batch, batch_idx):
         images, masks = batch
         outputs = self(images)
-        loss = self.loss_function(outputs, masks)
+        loss = self.loss_function(outputs, masks[0])
         self.log('train_loss', loss)
         return loss
 
     def validation_step(self, batch, batch_idx):
         images, masks = batch
         outputs = self(images)
-        loss = self.loss_function(outputs, masks)
+        loss = self.loss_function(outputs, masks[0])
         self.log('val_loss', loss)
 
     def configure_optimizers(self):
-        optimizer = torch.optim.Adam(self.parameters(), lr=self.learning_rate)
-        return optimizer
+        return torch.optim.Adam(self.parameters(), lr=self.learning_rate)
 
-    def fit_model(self, train_dataloader, val_dataloader):
-        trainer = pl.Trainer(
-            max_epochs=5,
-        )
+    def fit_model(self, train_dataloader, val_dataloader, epoch_num):
+        checkpoint_callback = ModelCheckpoint(dirpath='checkpoints/', filename='{epoch}-{val_loss:.2f}', save_top_k=-1,
+                                              save_weights_only=True, verbose=True)
 
-        trainer.fit(
-            self,
-            train_dataloaders=train_dataloader,
-            val_dataloaders=val_dataloader,
-        )
+        trainer = pl.Trainer(callbacks=[checkpoint_callback], max_epochs=epoch_num)
+
+        trainer.fit(self, train_dataloaders=train_dataloader, val_dataloaders=val_dataloader)
+
+    def get_predictions(self, test_dir, file_count):
+        predicted_names = ['predictions\\saved_test_image_{}.png'.format(i) for i in range(file_count)]
+        for name in predicted_names:
+            if not os.path.exists(name):
+                imgs_test, mask_test = dataset_preparation.load_images(test_dir)
+                predictions, metrics = ev.evaluate_images(self, imgs_test, mask_test, device='cpu')
+
+                for i, pred in enumerate(predictions):
+                    image = Image.fromarray((pred[0] * 255).astype(np.uint8))
+                    image.save('predictions\\saved_test_image_{}.png'.format(i))
+                break
+
+        return [np.array(Image.open('predictions\\saved_test_image_{}.png'.format(i))) for i in range(file_count)]
 
 
-def prepare_data():
-    dataset = ImageDataset(DATA_DIR)
-    train_size = int(0.8 * len(dataset))
-    train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_size, len(dataset) - train_size])
+def evaluate_predictions(test_dir, predictions, show=True):
+    imgs_test, mask_test = dataset_preparation.load_images(test_dir)
 
-    train_dataloader = DataLoader(train_dataset, shuffle=True)
-    val_dataloader = DataLoader(val_dataset, shuffle=False)
+    if show:
+        visualisation.visualise_results(test_dir, predictions)
 
-    return train_dataloader, val_dataloader
+    evaluations = ia.evaluate_match(imgs_test, mask_test, predictions)
 
-# images = load_images('DELISA', 'img.png')
-# masks = load_images('DELISA', 'mask.png')
-# x_train, x_val, y_train, y_val = train_test_split(images, masks, test_size=0.2, random_state=42)
-
-# model = smp.Unet(
-#     encoder_name="resnet34",
-#     encoder_weights="imagenet",
-#     in_channels=1,
-#     classes=1
-# )
-
-# preprocess_input = get_preprocessing_fn("resnet18", pretrained="imagenet")
-# loss = torch.nn.CrossEntropyLoss()
-# optimizer = torch.optim.Adam([dict(params=model.parameters(), lr=0.0001)])
+    for evaluation in evaluations.values():
+        print(evaluation['samples'])
 
 
 if __name__ == '__main__':
+    train, val = prepare_dataloaders(DATA_DIR)
     model = LitUnet()
-    train, val = prepare_data()
-    model.fit_model(train, val)
-    torch.save(model.state_dict(), 'segmentation_model.pth')
+    EPOCH_NUM = 50
+    model.fit_model(train, val, EPOCH_NUM)
 
-# x_train = preprocess_input(x_train)
-# x_val = preprocess_input(x_val)
-
-# model = sm.Unet(BACKBONE, input_shape=(1024, 1024, 1), activation='sigmoid', encoder_weights=None)
-# model.compile('Adam', loss=sm.losses.bce_jaccard_loss, metrics=[sm.metrics.iou_score])
-#
-# # model.summary()
-#
-# model.fit(
-#    x=x_train,
-#    y=y_train,
-#    batch_size=16,
-#    epochs=10,
-#    validation_data=(x_val, y_val)
-# )
+    checkpoint = list(pathlib.Path(os.getcwd() + "\\checkpoints").glob('epoch={}*'.format(EPOCH_NUM - 1)))[0]
+    model = LitUnet.load_from_checkpoint(checkpoint)
+    model.eval()
+    preds = model.get_predictions(pathlib.Path(TEST_DIR), 6)
+    evaluate_predictions(pathlib.Path(TEST_DIR), preds)

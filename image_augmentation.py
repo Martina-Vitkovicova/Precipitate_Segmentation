@@ -73,4 +73,4 @@ def change_contrast(img, mask):
 
 
 TRANSFORMS = [rotate_images, horizontal_flip, vertical_flip, change_brightness, change_contrast]
-save_augmented_images(DATA_DIR, TRANSFORMS)
+save_augmented_images(DATA_DIR+"\\labeled", TRANSFORMS)
