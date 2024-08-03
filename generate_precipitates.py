@@ -1,9 +1,7 @@
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
-import scipy
 from PIL import ImageFilter, Image
-from generate_background import voronoi_bg
 
 
 def add_precipitates(image, seed, min_precipitate_num, max_precipitate_num):
