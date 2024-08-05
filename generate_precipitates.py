@@ -11,7 +11,9 @@ def add_precipitates(image, seed, min_precipitate_num, max_precipitate_num):
 
     for _ in range(num):
         center = (rng.randint(20, image.shape[0] - 20), rng.randint(20, image.shape[1] - 20))
-        size = (rng.randint(2, 25), rng.randint(2, 10))
+        size = (generate_precip_size((1, 42), [2200, 30, 25, 15, 10, 6, 3, 2, 1, 1], rng),
+                generate_precip_size((1, 48), [2200, 30, 25, 15, 10, 6, 3, 2, 1, 1], rng))
+        # size = (rng.randint(1, 16), rng.randint(1, 12))
         angle = rng.randint(0, 180)
         color = (40, 40, 40)
 
@@ -25,7 +27,7 @@ def add_precipitates(image, seed, min_precipitate_num, max_precipitate_num):
 
 
 def perturb_contour_image_mask(image, mask, rng, center, size, angle, color):
-    ellipse_contour = cv2.ellipse(np.zeros((400, 400), dtype=np.uint8), center, size, angle, 0, 360, color, 4)
+    ellipse_contour = cv2.ellipse(np.zeros(image.shape, dtype=np.uint8), center, size, angle, 0, 360, color, 4)
     contours, _ = cv2.findContours(ellipse_contour, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
 
     for cont in contours:
@@ -66,6 +68,19 @@ def add_emboss(image, mask):
     mask = mask[1:-1, 1:-1]
 
     return image, mask
+
+
+def generate_precip_size(interval, distribution, rng):
+    breaks = np.ceil(np.linspace(start=interval[0], stop=interval[1], num=len(distribution) + 1))
+    intervals = [(breaks[i], breaks[i + 1]) for i in range(len(breaks) - 1)]
+    total = sum(distribution)
+    probabilities = [p / total for p in distribution]
+
+    chosen_interval = rng.choice(len(intervals), p=probabilities)
+    low, high = intervals[chosen_interval]
+    size = rng.randint(low, high)
+
+    return size
 
 
 
