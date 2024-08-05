@@ -11,7 +11,7 @@ def voronoi_bg(img_size, seed, min_regions, max_regions):
     rng = np.random.RandomState(seed)
     image = np.full(img_size, rng.randint(120, 150), dtype=np.float32)
     num_points = rng.randint(min_regions, max_regions)
-    points = rng.rand(num_points, 2) * 400
+    points = rng.rand(num_points, 2) * img_size[0]
 
     vor = scipy.spatial.Voronoi(points)
     regions, vertices = voronoi_finite_polygons_2d(vor)
@@ -59,7 +59,7 @@ def apply_wavy_perturbation(coords, image_shape, ampl=3, freq=0.05):
 
 def add_perlin_noise(image, seed, img_size):
     np.random.seed(seed)
-    noise = (generate_perlin_noise_2d(img_size, (100, 100)) + 1) * 255 / 2
+    noise = (generate_perlin_noise_2d(img_size, (img_size[0]//4, img_size[1]//4)) + 1) * 255 / 2
 
     alpha = 0.05
     blended_image = (image * (1 - alpha) + noise * alpha).astype(np.uint8)
