@@ -7,10 +7,12 @@ from perlin_numpy import generate_perlin_noise_2d
 from pv_voronoi_gist.colorized_voronoi import voronoi_finite_polygons_2d
 
 
-def voronoi_bg(img_size, seed, min_regions, max_regions):
+def voronoi_bg(seed, img_params):
+    img_size = img_params["img_size"]
     rng = np.random.RandomState(seed)
-    image = np.full(img_size, rng.randint(120, 150), dtype=np.float32)
-    num_points = rng.randint(min_regions, max_regions)
+    image = np.zeros(img_size, dtype=np.float32)
+    num_points = rng.randint(*img_params["voronoi_regions_num_range"])
+    assert img_size[0] == img_size[1]
     points = rng.rand(num_points, 2) * img_size[0]
 
     vor = scipy.spatial.Voronoi(points)
@@ -25,10 +27,9 @@ def voronoi_bg(img_size, seed, min_regions, max_regions):
 
         row, col = skdraw.polygon(polygon_verts[:, 1], polygon_verts[:, 0], shape=image.shape)
 
-        color = rng.randint(120, 150)
+        color = rng.randint(*img_params["voronoi_color_range"])
         image[row, col] = color
-        border_mask = add_border_width(polygon_verts[:, 1], polygon_verts[:, 0], img_size, 2)
-        image[border_mask == 1] = color - 5
+        image = add_border_width(image, color, polygon_verts, img_size, img_params["voronoi_border_width"])
 
     # plt.imshow(image, cmap='gray', vmin=0, vmax=255)
     # plt.show()
@@ -36,14 +37,15 @@ def voronoi_bg(img_size, seed, min_regions, max_regions):
     return image, regions, vertices
 
 
-def add_border_width(perturbed_col, perturbed_row, img_size, width):
-    perim_row, perim_col = skdraw.polygon_perimeter(perturbed_col, perturbed_row, shape=img_size)
+def add_border_width(image, color, polygon_verts, img_size, width):
+    perim_row, perim_col = skdraw.polygon_perimeter(polygon_verts[:, 1], polygon_verts[:, 0], shape=img_size)
 
     border_image = np.zeros(img_size)
     border_image[perim_row, perim_col] = 1
     border_mask = skimage.morphology.dilation(border_image, skimage.morphology.disk(width))
 
-    return border_mask
+    image[border_mask == 1] = color - 5
+    return image
 
 
 def apply_wavy_perturbation(coords, image_shape, ampl=3, freq=0.05):
