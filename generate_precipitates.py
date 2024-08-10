@@ -5,48 +5,54 @@ from PIL import ImageFilter, Image
 
 
 def add_precipitates(image, seed, img_params):
+    # to be done: change shape generation, probably bezier curves
     rng = np.random.RandomState(seed)
 
-    assert image.shape == img_params["img_size"]
+    assert (image.shape[1], image.shape[0]) == img_params["img_size"]
     mask = np.zeros(image.shape)
-    num = rng.randint(*img_params["precipitate_num_range"])
+    precip_num = rng.randint(*img_params["precipitate_num_range"])
+    angle = rng.randint(0, 180)
+    color = img_params["precipitate_color"]
+    mask_color = (255, 255, 255)
 
-    for _ in range(num):
-        center = (rng.randint(0, image.shape[0]), rng.randint(0, image.shape[1]))
+    for _ in range(precip_num):
+        center = (rng.randint(0, image.shape[1]), rng.randint(0, image.shape[0]))
         size = generate_precip_size(rng, img_params["precipitate_size_ranges"],
                                     img_params["precipitate_sizes_distribution"])
-        angle = rng.randint(0, 180)
-        color = img_params["precipitate_color"]
 
-        perturb_contour_image_mask(image, mask, center, size, angle, color)
         image = cv2.ellipse(image, center, size, angle, 0, 360, color, -1)
-        mask = cv2.ellipse(mask, center, size, angle, 0, 360, (255, 255, 255), -1)
+        mask = cv2.ellipse(mask, center, size, angle, 0, 360, mask_color, -1)
 
-    image, mask = add_emboss(image, mask)
+    perturb_precip_contour(image, mask, rng, color, mask_color)
+    image, mask = add_emboss_effect(image, mask)
 
     return image, mask
 
 
-def perturb_contour_image_mask(image, mask, center, size, angle, color):
-    ellipse_contour = cv2.ellipse(np.zeros(image.shape, dtype=np.uint8), center, size, angle, 0, 360, color, 4)
-    contours, _ = cv2.findContours(ellipse_contour, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+def perturb_precip_contour(image, mask, rng, color, mask_color):
+    contours, _ = cv2.findContours(mask.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
 
     for cont in contours:
-        ampl = (size[0] + size[1]) / 8
-        freq = 0.08
-
-        perturbation_sin = ampl * np.sin(freq * np.arange(len(cont)))
-        perturbation = np.stack((perturbation_sin, perturbation_sin), axis=-1)
-        smooth_noise = cv2.GaussianBlur(perturbation, (0, 0), sigmaX=ampl/2, sigmaY=ampl/2,
-                                        borderType=cv2.BORDER_REFLECT).reshape(len(cont), 1, 2).astype(np.int32)
-        cont += smooth_noise
+        _, _, width, height = cv2.boundingRect(cont)
+        noise_deviation = min(width, height) / 2 + 1
+        smoothing = noise_deviation * 1.5
+        noise = generate_smooth_noise(cont, rng, noise_deviation, smoothing)
+        cont += noise
 
     cv2.drawContours(image, contours, -1, color, -1)
-    cv2.drawContours(mask, contours, -1, (255, 255, 255), -1)
+    cv2.drawContours(mask, contours, -1, mask_color, -1)
 
 
-def add_emboss(image, mask):
-    # pad and then crop an image 1 px because of emboss filter border effect
+def generate_smooth_noise(contour, rng, max_noise, smoothing):
+    noise = np.array(rng.normal(0, max_noise, (len(contour), 1, 2))).astype(np.float32)
+    smooth_noise = cv2.GaussianBlur(noise, (0, 0), sigmaX=smoothing, sigmaY=smoothing,
+                                    borderType=cv2.BORDER_REFLECT)
+
+    return smooth_noise.astype(np.int32)
+
+
+def add_emboss_effect(image, mask):
+    # pad and then crop an image 1 px because of the emboss filter border effect
     image = np.pad(image, pad_width=1, mode='edge')
     pil_image = Image.fromarray(image.astype('uint8'), 'L')
 
@@ -74,7 +80,7 @@ def add_emboss(image, mask):
     return image, mask
 
 
-def generate_precip_size(rng, size_ranges, distribution):
+def generate_precip_size(rng, size_ranges, distribution, joined_size_distribution=True):
     sizes = []
     for size_range in size_ranges:
         breaks = np.ceil(np.linspace(start=size_range[0], stop=size_range[1], num=len(distribution) + 1))
@@ -86,16 +92,21 @@ def generate_precip_size(rng, size_ranges, distribution):
         low, high = intervals[chosen_interval]
         sizes.append(rng.randint(low, high))
 
-        # if the size along one axis is big, adjust the distribution so that it's more probable that the other side
-        # will be big too
-        if chosen_interval > len(distribution) // 2:
-            distribution = list(distribution)
-            value_to_add = distribution[0] // 2
-            for i in range(len(distribution) // 2, len(distribution)):
-                decay_rate = 0.6
-                distribution[i] += value_to_add
-                value_to_add *= decay_rate
+        if joined_size_distribution:
+            distribution = adjust_precip_size_distribution(chosen_interval, distribution)
 
     return sizes
 
 
+def adjust_precip_size_distribution(interval, distribution):
+    # if the size along one axis is big, adjust the distribution so that it's more probable that the other side
+    # will be big too
+    if interval > len(distribution) // 2:
+        distribution = list(distribution)
+        value_to_add = distribution[0] // 2
+        for i in range(len(distribution) // 2, len(distribution)):
+            decay_rate = 0.6
+            distribution[i] += value_to_add
+            value_to_add *= decay_rate
+
+    return distribution
