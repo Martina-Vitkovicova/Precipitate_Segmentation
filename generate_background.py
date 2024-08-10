@@ -53,4 +53,3 @@ def apply_wavy_perturbation(coords, image_shape, ampl=3, freq=0.05):
     perim_col = np.clip(perturbed_coords[:, 1].astype(int), 0, image_shape[1] - 1)
     
     return perim_row, perim_col
-

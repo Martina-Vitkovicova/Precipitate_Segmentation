@@ -206,9 +206,9 @@ vis.plot_precision_recall_curve(mean_evaluations)
     
 import numpy as np
 from matplotlib import pyplot as plt
-from generate_background import voronoi_bg, add_perlin_noise
+from generate_background import voronoi_bg
 from generate_precipitates import add_precipitates
-from generate_images import generate_image, save_images
+from generate_images import generate_image, save_images, add_perlin_noise
 
 
 img_params = {
@@ -222,7 +222,7 @@ img_params = {
     "voronoi_border_width": 2,
 }
 
-for i in range(33):
+for i in range(5):
     root_seed = np.random.randint(0, 10**5)
     img, mask = generate_image(root_seed, img_params)
 
@@ -236,6 +236,10 @@ for i in range(33):
 
     plt.show()
 
+
+```
+
+```python
 
 ```
 

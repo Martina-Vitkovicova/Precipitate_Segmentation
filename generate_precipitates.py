@@ -1,11 +1,10 @@
 import cv2
 import numpy as np
-import matplotlib.pyplot as plt
 from PIL import ImageFilter, Image
 
 
 def add_precipitates(image, seed, img_params):
-    # to be done: change shape generation, probably bezier curves
+    # to be done: change the shape generation, probably bezier curves
     rng = np.random.RandomState(seed)
 
     assert (image.shape[1], image.shape[0]) == img_params["img_size"]
@@ -19,7 +18,6 @@ def add_precipitates(image, seed, img_params):
         center = (rng.randint(0, image.shape[1]), rng.randint(0, image.shape[0]))
         size = generate_precip_size(rng, img_params["precipitate_size_ranges"],
                                     img_params["precipitate_sizes_distribution"])
-
         image = cv2.ellipse(image, center, size, angle, 0, 360, color, -1)
         mask = cv2.ellipse(mask, center, size, angle, 0, 360, mask_color, -1)
 
@@ -35,7 +33,7 @@ def perturb_precip_contour(image, mask, rng, color, mask_color):
     for cont in contours:
         _, _, width, height = cv2.boundingRect(cont)
         noise_deviation = min(width, height) / 2 + 1
-        smoothing = noise_deviation * 1.5
+        smoothing = noise_deviation * 0.8
         noise = generate_smooth_noise(cont, rng, noise_deviation, smoothing)
         cont += noise
 
