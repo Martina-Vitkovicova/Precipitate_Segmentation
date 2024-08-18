@@ -3,21 +3,22 @@ import numpy as np
 from PIL import ImageFilter, Image
 
 
-def add_precipitates(image, seed, img_params):
-    # to be done: change the shape generation, probably bezier curves
+def add_precipitates(image, seed, *, img_size, precipitate_color, precipitate_num_range, precipitate_size_ranges,
+                     precipitate_sizes_distribution, **kwargs):
+    # to do: change the shape generation, probably bezier curves
     rng = np.random.RandomState(seed)
 
-    assert (image.shape[1], image.shape[0]) == img_params["img_size"]
+    assert [image.shape[1], image.shape[0]] == img_size
     mask = np.zeros(image.shape)
-    precip_num = rng.randint(*img_params["precipitate_num_range"])
+    precip_num = rng.randint(*precipitate_num_range)
     angle = rng.randint(0, 180)
-    color = img_params["precipitate_color"]
+    color = precipitate_color
     mask_color = (255, 255, 255)
 
     for _ in range(precip_num):
         center = (rng.randint(0, image.shape[1]), rng.randint(0, image.shape[0]))
-        size = generate_precip_size(rng, img_params["precipitate_size_ranges"],
-                                    img_params["precipitate_sizes_distribution"])
+        size = generate_precip_size(rng, precipitate_size_ranges,
+                                    precipitate_sizes_distribution)
         image = cv2.ellipse(image, center, size, angle, 0, 360, color, -1)
         mask = cv2.ellipse(mask, center, size, angle, 0, 360, mask_color, -1)
 

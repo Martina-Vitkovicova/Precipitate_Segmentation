@@ -1,3 +1,5 @@
+from typing import List
+
 import numpy as np
 import scipy
 import skimage
@@ -5,11 +7,12 @@ import skimage.draw as skdraw
 from pv_voronoi_gist.colorized_voronoi import voronoi_finite_polygons_2d
 
 
-def voronoi_bg(seed, img_params):
+def voronoi_bg(seed: int, *, img_size: List[int], voronoi_regions_num_range: List[int],
+               voronoi_color_range: List[int], voronoi_border_width: int, **kwargs):
     rng = np.random.RandomState(seed)
-    width, height = img_params["img_size"]
+    width, height = img_size
     image = np.zeros((height, width), dtype=np.float32)
-    num_points = rng.randint(*img_params["voronoi_regions_num_range"])
+    num_points = rng.randint(*voronoi_regions_num_range)
 
     points = np.column_stack((rng.uniform(0, width, num_points), rng.uniform(0, height, num_points)))
 
@@ -26,9 +29,9 @@ def voronoi_bg(seed, img_params):
 
         row, col = skdraw.polygon(polygon_verts[:, 1], polygon_verts[:, 0], shape=image.shape)
 
-        color = rng.randint(*img_params["voronoi_color_range"])
+        color = rng.randint(*voronoi_color_range)
         image[row, col] = color
-        image = change_region_border_width(image, color, polygon_verts, img_params["voronoi_border_width"])
+        image = change_region_border_width(image, color, polygon_verts, voronoi_border_width)
 
     return image
 
