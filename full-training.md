@@ -206,28 +206,18 @@ vis.plot_precision_recall_curve(mean_evaluations)
     
 import numpy as np
 from matplotlib import pyplot as plt
-from generate_background import voronoi_bg
-from generate_precipitates import add_precipitates
-from generate_images import generate_image, save_images, add_perlin_noise
+from generate_images import generate_image, save_images
 
+IMG_PARAMS_PATH = "img_params.json"
 
-img_params = {
-    "img_size": (1024, 1024),
-    "precipitate_num_range": (150, 350),
-    "precipitate_color": (40, 40, 40),
-    "precipitate_size_ranges": ((1, 45), (1, 48)),
-    "precipitate_sizes_distribution": (2200, 30, 25, 15, 10, 6, 3, 2, 1, 1),
-    "voronoi_regions_num_range": (10, 20),
-    "voronoi_color_range": (120, 150),
-    "voronoi_border_width": 2,
-}
 
 for i in range(5):
-    root_seed = np.random.randint(0, 10**5)
-    img, mask = generate_image(root_seed, img_params)
+    root_seed = np.random.randint(0, 10 ** 5)
 
-    # save_images("../Data/gen2", "2", root_seed, img, mask)
-    
+    img, mask = generate_image(root_seed, IMG_PARAMS_PATH)
+
+    save_images("../Data/gen3", root_seed, img, mask, IMG_PARAMS_PATH, 3)
+
     fig, axes = plt.subplots(1, 2, figsize=(10, 5))
     axes[0].imshow(img, cmap='gray')
     axes[0].axis('off')
