@@ -1,4 +1,5 @@
 import cv2
+import matplotlib.pyplot as plt
 import numpy as np
 from PIL import ImageFilter, Image
 
@@ -51,30 +52,18 @@ def generate_smooth_noise(contour, rng, max_noise, smoothing):
 
 
 def add_emboss_effect(image, mask):
-    # pad and then crop an image 1 px because of the emboss filter border effect
-    image = np.pad(image, pad_width=1, mode='edge')
-    pil_image = Image.fromarray(image.astype('uint8'), 'L')
+    grad_x = cv2.Sobel(image, cv2.CV_64F, 1, 0, ksize=3)
+    grad_y = cv2.Sobel(image, cv2.CV_64F, 0, 1, ksize=3)
 
-    mask = np.pad(mask, pad_width=1, mode='edge')
-    pil_mask = Image.fromarray(mask.astype('uint8'), 'L')
+    magnitude = np.sqrt(grad_x ** 2 + grad_y ** 2)
+    direction = np.degrees(np.arctan2(grad_y, grad_x))
+    direction = ((direction + 180) % 360)
 
-    kernel = (
-        1, 0, 0,
-        0, 0, 0,
-        0, 0, -1
-    )
-
-    ImageFilter.EMBOSS.filterargs = ((3, 3), 1, 128, kernel)
-    embossed_image = np.array(pil_image.filter(ImageFilter.EMBOSS))
-    emboss_image_effect = embossed_image != 128
     # copy just the effect of emboss, otherwise the image will be mostly grey
-    image[emboss_image_effect] = embossed_image[emboss_image_effect]
-    image = image[1:-1, 1:-1]
+    emboss_effect = magnitude > 128
 
-    embossed_mask = np.array(pil_mask.filter(ImageFilter.EMBOSS))
-    embossed_mask_effect = (embossed_mask != 128) * np.uint8(255)
-    mask = np.where((mask == 255) | (embossed_mask_effect == 255), 255, 0).astype(np.uint8)
-    mask = mask[1:-1, 1:-1]
+    image[emboss_effect] = direction[emboss_effect]
+    mask[emboss_effect] = 255
 
     return image, mask
 
