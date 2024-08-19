@@ -52,8 +52,8 @@ def generate_smooth_noise(contour, rng, max_noise, smoothing):
 
 
 def add_emboss_effect(image, mask):
-    grad_x = cv2.Sobel(image, cv2.CV_64F, 1, 0, ksize=3)
-    grad_y = cv2.Sobel(image, cv2.CV_64F, 0, 1, ksize=3)
+    grad_x = cv2.Sobel(mask, cv2.CV_64F, 1, 0, ksize=3)
+    grad_y = cv2.Sobel(mask, cv2.CV_64F, 0, 1, ksize=3)
 
     magnitude = np.sqrt(grad_x ** 2 + grad_y ** 2)
     direction = np.degrees(np.arctan2(grad_y, grad_x))

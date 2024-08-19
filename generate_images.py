@@ -9,8 +9,6 @@ from generate_background import voronoi_bg
 from generate_precipitates import add_precipitates
 from perlin_numpy import generate_perlin_noise_2d
 
-IMG_PARAMS_PATH = "img_params.json"
-
 
 def generate_image(root_seed, img_params_path):
     rng = np.random.RandomState(root_seed)
