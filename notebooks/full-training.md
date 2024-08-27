@@ -5,11 +5,11 @@ jupyter:
       extension: .md
       format_name: markdown
       format_version: '1.3'
-      jupytext_version: 1.14.6
+      jupytext_version: 1.16.3
   kernelspec:
-    display_name: torch_cv
+    display_name: Python 3 (ipykernel)
     language: python
-    name: torch_cv
+    name: python3
 ---
 
 ```python
@@ -24,8 +24,8 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 ```python
 import pathlib
-root = pathlib.Path('/home/knotek/jupyterlab/micro-precipitates/data/20230623/labeled/')
-training_output_root = pathlib.Path('/home/knotek/jupyterlab/training/SEM-prec-20240715')
+root = pathlib.Path('C:\\Users\\vitko\\Desktop\\CVR\\Data\\labeled')
+training_output_root = pathlib.Path('C:\\Users\\vitko\\Desktop\\CVR')
 ```
 
 ```python
@@ -127,6 +127,7 @@ with logging_redirect_tqdm():
         #weightmaps = weightmaps,
         model = model
     )
+
 ```
 
 ```python
@@ -144,6 +145,7 @@ import denoiseg.training as tr
 from tqdm.auto import tqdm
 import denoiseg.evaluation as ev
 
+# checkpoint = "C:\\Users\\vitko\\Desktop\\CVR\\20240804214414\\model-checkpoint-best.pth"
 model = torch.load(checkpoint)
 predictions, metrics = ev.evaluate_images(
     model, 
@@ -157,6 +159,7 @@ print(f'Mean IoU {np.mean(metrics):.5f}')
 
 ```python
 print(f"x,y,prediction")
+import denoiseg.visualization as vis
 for i,(img,gt,pred,met) in enumerate(zip(test_x,test_y,predictions,metrics)):
     
     segms = []
@@ -193,4 +196,43 @@ preds = [p[1:] for p in predictions]
 evaluations = ia.evaluate_match(test_x,test_y,preds)
 mean_evaluations = ia.mean_evaluations(evaluations)
 vis.plot_precision_recall_curve(mean_evaluations)
+```
+
+# Image Synthesis
+
+```python
+%load_ext autoreload
+%autoreload 2
+    
+import numpy as np
+from matplotlib import pyplot as plt
+from generate_images import generate_image, save_images
+
+IMG_PARAMS_PATH = "img_params.json"
+IMG_SAVE_PATH = "../Data/gen3"
+
+
+for i in range(5):
+    root_seed = np.random.randint(0, 10 ** 5)
+    img, mask = generate_image(root_seed, IMG_PARAMS_PATH)
+
+    save_images(IMG_SAVE_PATH, root_seed, img, mask, IMG_PARAMS_PATH, 3)
+
+    fig, axes = plt.subplots(1, 2, figsize=(10, 5))
+    axes[0].imshow(img, cmap='gray')
+    axes[0].axis('off')
+    axes[1].imshow(mask, cmap='gray')
+    axes[1].axis('off')
+
+    plt.show()
+
+
+```
+
+```python
+
+```
+
+```python
+
 ```
