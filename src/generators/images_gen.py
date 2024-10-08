@@ -5,8 +5,8 @@ from pathlib import Path
 import numpy as np
 from matplotlib import pyplot as plt
 
-from generate_background import voronoi_bg
-from generate_precipitates import add_precipitates
+from background_gen import voronoi_bg
+from precipitates_gen import add_precipitates
 from perlin_numpy import generate_perlin_noise_2d
 
 

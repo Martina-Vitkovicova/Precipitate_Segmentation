@@ -29,15 +29,18 @@ training_output_root = pathlib.Path('C:\\Users\\vitko\\Desktop\\CVR')
 ```
 
 ```python
-import delisa_loader
-x,y = delisa_loader.load_pairs(root)
+import sys
+sys.path.append('../src')
+from external_libs import delisa_loader
+
+x, y = delisa_loader.load_pairs(root)
 
 assert len(x) == len(y)
 assert len(x) > 0
 
 print("Found training pairs", len(x))
 
-test_x,test_y = delisa_loader.load_pairs(root/'../../test')
+test_x, test_y = delisa_loader.load_pairs(root / '../../test')
 assert len(test_x) == len(test_y)
 assert len(test_x) > 0
 print("Found testing pairs", len(test_x))
@@ -196,43 +199,4 @@ preds = [p[1:] for p in predictions]
 evaluations = ia.evaluate_match(test_x,test_y,preds)
 mean_evaluations = ia.mean_evaluations(evaluations)
 vis.plot_precision_recall_curve(mean_evaluations)
-```
-
-# Image Synthesis
-
-```python
-%load_ext autoreload
-%autoreload 2
-    
-import numpy as np
-from matplotlib import pyplot as plt
-from generate_images import generate_image, save_images
-
-IMG_PARAMS_PATH = "img_params.json"
-IMG_SAVE_PATH = "../Data/gen3"
-
-
-for i in range(5):
-    root_seed = np.random.randint(0, 10 ** 5)
-    img, mask = generate_image(root_seed, IMG_PARAMS_PATH)
-
-    save_images(IMG_SAVE_PATH, root_seed, img, mask, IMG_PARAMS_PATH, 3)
-
-    fig, axes = plt.subplots(1, 2, figsize=(10, 5))
-    axes[0].imshow(img, cmap='gray')
-    axes[0].axis('off')
-    axes[1].imshow(mask, cmap='gray')
-    axes[1].axis('off')
-
-    plt.show()
-
-
-```
-
-```python
-
-```
-
-```python
-
 ```

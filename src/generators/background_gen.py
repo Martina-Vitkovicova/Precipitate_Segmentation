@@ -4,7 +4,7 @@ import numpy as np
 import scipy
 import skimage
 import skimage.draw as skdraw
-from pv_voronoi_gist.colorized_voronoi import voronoi_finite_polygons_2d
+from external_libs.pv_voronoi_gist.colorized_voronoi import voronoi_finite_polygons_2d
 
 
 def voronoi_bg(seed: int, *, img_size: List[int], voronoi_regions_num_range: List[int],
