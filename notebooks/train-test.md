@@ -5,11 +5,11 @@ jupyter:
       extension: .md
       format_name: markdown
       format_version: '1.3'
-      jupytext_version: 1.15.0
+      jupytext_version: 1.16.3
   kernelspec:
-    display_name: gridsegmentation
+    display_name: Python 3 (ipykernel)
     language: python
-    name: gridsegmentation
+    name: python3
 ---
 
 ```python
@@ -27,8 +27,11 @@ logging.basicConfig(level=logging.INFO)
 
 ```python
 from pathlib import Path
-real_root = Path('/home/knotek/jupyterlab/data/delisa_2023/')
-synt_root = Path('/home/knotek/jupyterlab/data/delisa_synt/')
+# real_root = Path('/home/knotek/jupyterlab/data/delisa_2023/')
+# synt_root = Path('/home/knotek/jupyterlab/data/delisa_synt/')
+
+real_root = Path('C:/Users/vitko/Desktop/CVR/Data/labeled_new')
+synt_root = Path('C:/Users/vitko/Desktop/CVR/test')
 ```
 
 ```python
@@ -56,11 +59,13 @@ from tqdm.auto import tqdm
 import matplotlib.pyplot as plt
 import semseg.io as io
 
+
 small_filter = 4
 img_paths = list(synt_root.rglob('*/**/img.png'))
 test_img_paths = list(real_root.rglob('*/**/img.png'))
 
-model_path = Path('/home/knotek/jupyterlab/training/delisa_2023_synth/model.pth')
+# model_path = Path('/home/knotek/jupyterlab/training/delisa_2023_synth/model.pth')
+model_path = Path('C:/Users/vitko/Desktop/CVR/Models')
 label_paths = [ p.parent/'mask.png' for p in img_paths]
 
 img_names = [p.parent.stem for p in img_paths]
