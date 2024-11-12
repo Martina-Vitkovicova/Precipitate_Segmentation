@@ -43,9 +43,9 @@ def make_wiggly_edges(regions, vertices, width, height):
     modified_edges = {}
 
     for region in regions:
-        for j in range(len(region) - 1):
+        for j in range(len(region)):
             index1 = region[j]
-            index2 = region[(j + 1)]
+            index2 = region[(j + 1) % len(region)]
             edge = (index1, index2)
             sorted_edge = tuple(sorted(edge))
 
@@ -54,15 +54,8 @@ def make_wiggly_edges(regions, vertices, width, height):
                 edge_rng = np.random.RandomState(edge_seed)
                 v1, v2 = vertices[sorted_edge[0]], vertices[sorted_edge[1]]
                 line_length = np.linalg.norm(v2 - v1)
-                base_segments = max(2, int(np.sqrt(line_length) * 0.3))
+                base_segments = max(2, int(np.sqrt(line_length) * 0.2))
                 num_segments = max(2, min(10, base_segments + edge_rng.randint(-base_segments//2, base_segments//2)))
-
-                # problem with lines going outside the image - the breaks in the lines are outside, far away,
-                # lines seems straight in the image. Fix - detect such lines, make breaks in image area
-                # v1 = np.clip(vertices[sorted_edge[0]], [0, 0], [height, width])
-                # v2 = np.clip(vertices[sorted_edge[1]], [0, 0], [height, width])
-
-                # also noise level corresponding to the line length?
                 noise = max(10, min(20, int(np.sqrt(line_length) * 0.3) + edge_rng.randint(-2, 2)))
                 modified_edges[sorted_edge] = divide_edge(v1, v2, edge_rng, width, height, num_segments, noise)
 
@@ -71,21 +64,14 @@ def make_wiggly_edges(regions, vertices, width, height):
 
 def get_wiggly_region_coords(modified_edges, region):
     y_coords, x_coords = [], []
-    for j in range(len(region) - 1):
+    for j in range(len(region)):
         v1 = region[j]
-        v2 = region[(j + 1)]
+        v2 = region[(j + 1) % len(region)]
         edge = (v1, v2)
         sorted_edge = tuple(sorted(edge))
         poly_edge = modified_edges[sorted_edge]
         if edge != sorted_edge:
             poly_edge = poly_edge[::-1]
-
-        # if x_coords and y_coords:
-        #     last_point = np.array([x_coords[-1], y_coords[-1]])
-        #     if not np.allclose(last_point, poly_edge[0]):
-        #         # Reverse the edge if it connects at the end
-        #         if np.allclose(last_point, poly_edge[-1]):
-        #             poly_edge = poly_edge[::-1]
 
         x_coords.extend(poly_edge[:, 0])
         y_coords.extend(poly_edge[:, 1])
@@ -94,25 +80,22 @@ def get_wiggly_region_coords(modified_edges, region):
 
 
 def divide_edge(start, end, rng, width, height, num_segments=10, noise_level=10):
+    start = tuple(map(int, start))
+    end = tuple(map(int, end))
+    inside, new_start, new_end = cv2.clipLine((0, 0, width, height), start, end)
+    if not inside:
+        return np.array([np.array(start), np.array(end)])
+
     noisy_points = [np.array(start)]
-    if is_outside_image(start, width, height):
-        start = np.clip(start, [0, 0], [height, width])
-    new_end = np.clip(end, [0, 0], [height, width]) if is_outside_image(end, width, height) else end
+    # todo ad randomness to the spacing
+    points = np.linspace(new_start, new_end, num_segments+1)
 
-    points = np.linspace(start, new_end, num_segments+1)
-
-    for i in range(1, len(points) - 1):
+    for i in range(len(points)):
         noise = rng.normal(0, noise_level, size=2)
         noisy_points.append(points[i] + noise)
     noisy_points.append(np.array(end))
 
     return np.array(noisy_points)
-
-
-def is_outside_image(point, width, height):
-    y, x = point
-    allowance = 50
-    return -allowance > x > width + allowance or -allowance > y > height + allowance
 
 
 def get_edge_seed(edge):
@@ -123,31 +106,19 @@ def get_edge_seed(edge):
 def change_region_border_width(image, color, y_coords, x_coords, width, rng):
     perim_row, perim_col = skdraw.polygon_perimeter(y_coords, x_coords, shape=image.shape)
 
-    # width += rng.randint(-width * 3/4, width * 3/4)
     border_image = np.zeros(image.shape)
     border_image[perim_row, perim_col] = 1
     border_mask = skimage.morphology.dilation(border_image, skimage.morphology.disk(width))
-    for i in range(5):
-        perim_row, perim_col = slice_lists(perim_row, perim_col, 20, rng)
+    for i in range(3):
+        perim_row, perim_col = slice_lists(perim_row, perim_col, rng.randint(20, 100), rng)
         border_image[perim_row, perim_col] = 0
-        width += 1
+        width += 2
         triangle = create_triangle(width)
         n_mask = skimage.morphology.dilation(border_image, triangle)
         border_mask = np.maximum(n_mask, border_mask)
 
-    # contours, _ = cv2.findContours(border_image.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-    # plt.imshow(border_image)
-    # plt.show()
-    # for cont in contours:
-    #     segment_length_range = [20, 50]
-    #     border_width = generate_border_width(len(cont), rng, segment_length_range)[:, np.newaxis, np.newaxis]
-    #     cont += border_width
-    #
-    # cv2.drawContours(image, contours, -1, color - 5, 1)
-
-    # perturb_precip_contour(image, border_image, rng, color, color)
-
-    image[border_mask == 1] = color - 5
+    # todo add 3d effect to the border
+    image[border_mask == 1] = color + rng.randint(-15, 15)
     return image
 
 
@@ -165,14 +136,14 @@ def slice_lists(row, col, seq_len, rng):
 
     while i < len(row):
         if rng.choice([True, False]):
-            sequence_length = rng.randint(1, seq_len)
+            sequence_length = rng.randint(10, seq_len)
             end_index = min(i + sequence_length, len(row))
             new_row.extend(row[i:end_index])
             new_col.extend(col[i:end_index])
             i = end_index
         else:
             # Random length for the pause (at least 1)
-            pause_length = rng.randint(1, seq_len)
+            pause_length = rng.randint(10, seq_len)
             i += pause_length
 
     return new_row, new_col

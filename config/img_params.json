@@ -4,7 +4,7 @@
   "precipitate_color": [40, 40, 40],
   "precipitate_size_ranges": [[1, 45], [1, 48]],
   "precipitate_sizes_distribution": [2200, 30, 25, 15, 10, 6, 3, 2, 1, 1],
-  "voronoi_regions_num_range": [10, 20],
+  "voronoi_regions_num_range": [15, 25],
   "voronoi_color_range": [120, 150],
   "voronoi_border_width": 2
 }
