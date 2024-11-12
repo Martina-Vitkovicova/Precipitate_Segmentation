@@ -24,7 +24,7 @@ def voronoi_bg(seed: int, *, img_size: List[int], voronoi_regions_num_range: Lis
 
     vor = scipy.spatial.Voronoi(points)
     regions, vertices = voronoi_finite_polygons_2d(vor)
-    modified_edges = make_wiggly_edges(regions, vertices)
+    modified_edges = make_wiggly_edges(regions, vertices, width, height)
 
     for region in regions:
         y_coords, x_coords = get_wiggly_region_coords(modified_edges, region)
@@ -39,7 +39,7 @@ def voronoi_bg(seed: int, *, img_size: List[int], voronoi_regions_num_range: Lis
     return image
 
 
-def make_wiggly_edges(regions, vertices):
+def make_wiggly_edges(regions, vertices, width, height):
     modified_edges = {}
 
     for region in regions:
@@ -52,8 +52,10 @@ def make_wiggly_edges(regions, vertices):
             if sorted_edge not in modified_edges:
                 edge_seed = get_edge_seed(sorted_edge)
                 edge_rng = np.random.RandomState(edge_seed)
-                num_segments = edge_rng.randint(3, 6)
                 v1, v2 = vertices[sorted_edge[0]], vertices[sorted_edge[1]]
+                line_length = np.linalg.norm(v2 - v1)
+                base_segments = max(2, int(np.sqrt(line_length) * 0.3))
+                num_segments = max(2, min(10, base_segments + edge_rng.randint(-base_segments//2, base_segments//2)))
 
                 # problem with lines going outside the image - the breaks in the lines are outside, far away,
                 # lines seems straight in the image. Fix - detect such lines, make breaks in image area
@@ -61,9 +63,8 @@ def make_wiggly_edges(regions, vertices):
                 # v2 = np.clip(vertices[sorted_edge[1]], [0, 0], [height, width])
 
                 # also noise level corresponding to the line length?
-                noise = 8
-
-                modified_edges[sorted_edge] = divide_edge(v1, v2, edge_rng, num_segments, noise)
+                noise = max(10, min(20, int(np.sqrt(line_length) * 0.3) + edge_rng.randint(-2, 2)))
+                modified_edges[sorted_edge] = divide_edge(v1, v2, edge_rng, width, height, num_segments, noise)
 
     return modified_edges
 
@@ -85,15 +86,20 @@ def get_wiggly_region_coords(modified_edges, region):
         #         # Reverse the edge if it connects at the end
         #         if np.allclose(last_point, poly_edge[-1]):
         #             poly_edge = poly_edge[::-1]
+
         x_coords.extend(poly_edge[:, 0])
         y_coords.extend(poly_edge[:, 1])
 
     return y_coords, x_coords
 
 
-def divide_edge(start, end, rng, num_segments=10, noise_level=10):
-    points = np.linspace(start, end, num_segments+1)
+def divide_edge(start, end, rng, width, height, num_segments=10, noise_level=10):
     noisy_points = [np.array(start)]
+    if is_outside_image(start, width, height):
+        start = np.clip(start, [0, 0], [height, width])
+    new_end = np.clip(end, [0, 0], [height, width]) if is_outside_image(end, width, height) else end
+
+    points = np.linspace(start, new_end, num_segments+1)
 
     for i in range(1, len(points) - 1):
         noise = rng.normal(0, noise_level, size=2)
@@ -101,6 +107,12 @@ def divide_edge(start, end, rng, num_segments=10, noise_level=10):
     noisy_points.append(np.array(end))
 
     return np.array(noisy_points)
+
+
+def is_outside_image(point, width, height):
+    y, x = point
+    allowance = 50
+    return -allowance > x > width + allowance or -allowance > y > height + allowance
 
 
 def get_edge_seed(edge):
