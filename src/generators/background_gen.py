@@ -4,11 +4,12 @@ from typing import List
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
+from scipy import ndimage
 import scipy
 import skimage
 import skimage.draw as skdraw
 
-from generators.precipitates_gen import perturb_precip_contour
+from perlin_numpy import generate_perlin_noise_2d
 from src.external_libs.pv_voronoi_gist.colorized_voronoi import voronoi_finite_polygons_2d
 
 
@@ -24,22 +25,31 @@ def voronoi_bg(seed: int, *, img_size: List[int], voronoi_regions_num_range: Lis
 
     vor = scipy.spatial.Voronoi(points)
     regions, vertices = voronoi_finite_polygons_2d(vor)
-    modified_edges = make_wiggly_edges(regions, vertices, width, height)
+    modified_edges = make_curved_edges(regions, vertices, width, height)
 
     for region in regions:
-        y_coords, x_coords = get_wiggly_region_coords(modified_edges, region)
+        y_coords, x_coords = get_curved_region_coords(modified_edges, region)
         row, col = skdraw.polygon(y_coords, x_coords, shape=image.shape)
         color = rng.randint(*voronoi_color_range)
         image[row, col] = color
+        # todo why is the result darker if applying noise to individual regions?
+        # alpha = max(0.02, min(0.1, rng.random()))
+        # divisor = rng.choice((2, 4))
+        # add_perlin_noise(image, rng, alpha, (image.shape[0] // divisor, image.shape[1] // divisor), row, col)
         # plt.imshow(image, cmap="gray")
         # plt.show()
 
         image = change_region_border_width(image, color, y_coords, x_coords, voronoi_border_width, rng)
 
+    noise = generate_perlin_noise_2d((width, height), (image.shape[0] // 4, image.shape[1] // 4), rng=rng)
+    scaled_noise = (noise + 1) * 255 / 2
+    alpha = 0.08
+    image = (image * (1 - alpha) + scaled_noise * alpha).astype(np.uint8)
+
     return image
 
 
-def make_wiggly_edges(regions, vertices, width, height):
+def make_curved_edges(regions, vertices, width, height):
     modified_edges = {}
 
     for region in regions:
@@ -55,14 +65,14 @@ def make_wiggly_edges(regions, vertices, width, height):
                 v1, v2 = vertices[sorted_edge[0]], vertices[sorted_edge[1]]
                 line_length = np.linalg.norm(v2 - v1)
                 base_segments = max(2, int(np.sqrt(line_length) * 0.2))
-                num_segments = max(2, min(10, base_segments + edge_rng.randint(-base_segments//2, base_segments//2)))
-                noise = max(10, min(20, int(np.sqrt(line_length) * 0.3) + edge_rng.randint(-2, 2)))
+                num_segments = max(4, min(12, base_segments + edge_rng.randint(-base_segments//2, base_segments//2)))
+                noise = max(5, min(10, int(np.sqrt(line_length) * 0.3) + edge_rng.randint(-2, 2)))
                 modified_edges[sorted_edge] = divide_edge(v1, v2, edge_rng, width, height, num_segments, noise)
 
     return modified_edges
 
 
-def get_wiggly_region_coords(modified_edges, region):
+def get_curved_region_coords(modified_edges, region):
     y_coords, x_coords = [], []
     for j in range(len(region)):
         v1 = region[j]
@@ -87,7 +97,7 @@ def divide_edge(start, end, rng, width, height, num_segments=10, noise_level=10)
         return np.array([np.array(start), np.array(end)])
 
     noisy_points = [np.array(start)]
-    # todo ad randomness to the spacing
+    # notodo ad randomness to the spacing - no need bcs noise creates the randomness
     points = np.linspace(new_start, new_end, num_segments+1)
 
     for i in range(len(points)):
@@ -108,17 +118,30 @@ def change_region_border_width(image, color, y_coords, x_coords, width, rng):
 
     border_image = np.zeros(image.shape)
     border_image[perim_row, perim_col] = 1
-    border_mask = skimage.morphology.dilation(border_image, skimage.morphology.disk(width))
-    for i in range(3):
-        perim_row, perim_col = slice_lists(perim_row, perim_col, rng.randint(20, 100), rng)
-        border_image[perim_row, perim_col] = 0
+    # plt.imshow(border_image)
+    # plt.show()
+    triangle = np.tri(width, width, dtype=np.uint8)
+    border_mask = skimage.morphology.dilation(border_image, triangle)
+    # plt.imshow(border_mask)
+    # plt.show()
+
+    for i in range(4):
+        seq_length = rng.randint(50 // (i+1), 100 // (i+1))
+        perim_row, perim_col, exclude_row, exclude_col = slice_lists(perim_row, perim_col, seq_length, rng)
+        border_image[exclude_row, exclude_col] = 0
+        # plt.imshow(border_image)
+        # plt.show()
         width += 2
-        triangle = create_triangle(width)
+        triangle = np.tri(width, width, dtype=np.uint8)
         n_mask = skimage.morphology.dilation(border_image, triangle)
+        # plt.imshow(n_mask)
+        # plt.show()
         border_mask = np.maximum(n_mask, border_mask)
+        # plt.imshow(border_mask)
+        # plt.show()
 
     # todo add 3d effect to the border
-    image[border_mask == 1] = color + rng.randint(-15, 15)
+    image[border_mask == 1] = color + rng.choice([-1, 1]) * rng.randint(8, 16)
     return image
 
 
@@ -132,47 +155,34 @@ def create_triangle(size):
 def slice_lists(row, col, seq_len, rng):
     new_row = []
     new_col = []
+    removed_row = []
+    removed_col = []
     i = 0
+    total_length = len(row)
 
-    while i < len(row):
+    while i < total_length:
         if rng.choice([True, False]):
+            # include these
             sequence_length = rng.randint(10, seq_len)
-            end_index = min(i + sequence_length, len(row))
+            end_index = min(i + sequence_length, total_length)
             new_row.extend(row[i:end_index])
             new_col.extend(col[i:end_index])
             i = end_index
         else:
-            # Random length for the pause (at least 1)
+            # pause - exclude these
             pause_length = rng.randint(10, seq_len)
-            i += pause_length
+            end_index = min(i + pause_length, total_length)
+            removed_row.extend(row[i:end_index])
+            removed_col.extend(col[i:end_index])
+            i = end_index
 
-    return new_row, new_col
-
-
-def apply_wavy_perturbation(coords, image_shape, ampl=3, freq=0.05):
-    perturbation_sin = ampl * np.sin(freq * np.arange(len(coords)))
-    perturbation_sin2 = (ampl + 1) * np.sin(freq - 0.02 * np.arange(len(coords)))
-    perturbed_coords = coords + perturbation_sin[:, np.newaxis] + perturbation_sin2[:, np.newaxis]
-
-    perim_row = np.clip(perturbed_coords[:, 0].astype(int), 0, image_shape[0] - 1)
-    perim_col = np.clip(perturbed_coords[:, 1].astype(int), 0, image_shape[1] - 1)
-    
-    return perim_row, perim_col
+    return new_row, new_col, removed_row, removed_col
 
 
-def generate_border_width(border_length, rng, segment_length_range, start=1, min_value=0, max_value=20):
-    width_list = [start]
+def add_perlin_noise(image, rng, alpha, res, row, col):
+    width, height = image.shape
+    noise = generate_perlin_noise_2d((width, height), res, rng=rng)
+    scaled_noise = (noise + 1) * 255 / 2
 
-    while len(width_list) < border_length:
-        # Determine the increasing or decreasing wave
-        max_w = 3
-        step = rng.randint(0, max_w) if len(width_list) % 2 == 1 else - rng.randint(1, max_w)
-        segment_length = rng.randint(*segment_length_range)
+    image[row, col] = (image[row, col] * (1 - alpha) + scaled_noise[row, col] * alpha).astype(np.uint8)
 
-        for _ in range(segment_length):
-            next_value = width_list[-1] + step
-            next_value = max(min_value, min(max_value, next_value))
-            width_list.append(next_value)
-            if len(width_list) >= border_length:
-                # return np.array(width_list).reshape(len(width_list), 1, 2)
-                return np.array(width_list)
