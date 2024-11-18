@@ -18,7 +18,7 @@ def voronoi_bg(seed: int, *, img_size: List[int], voronoi_regions_num_range: Lis
     rng = np.random.RandomState(seed)
     width, height = img_size
     # image = np.zeros((height, width), dtype=np.float32)
-    image = np.full((height, width), 118, dtype=np.float32)
+    image = np.full((height, width), 160, dtype=np.float32)
     num_points = rng.randint(*voronoi_regions_num_range)
     points = np.column_stack((rng.uniform(0, width, num_points), rng.uniform(0, height, num_points)))
 
@@ -31,19 +31,10 @@ def voronoi_bg(seed: int, *, img_size: List[int], voronoi_regions_num_range: Lis
         row, col = skdraw.polygon(y_coords, x_coords, shape=image.shape)
         color = rng.randint(*voronoi_color_range)
         image[row, col] = color
-        # todo fix  brightening the image with noise (mean must stay 0) + apply to individual regions?
-        # alpha = max(0.02, min(0.1, rng.random()))
-        # divisor = rng.choice((2, 4))
-        # add_perlin_noise(image, rng, alpha, (image.shape[0] // divisor, image.shape[1] // divisor), row, col)
-        # plt.imshow(image, cmap="gray")
-        # plt.show()
-
+        alpha = max(0.05, min(0.2, rng.random()))
+        divisor = rng.choice((2, 4))
         image = change_region_border_width(image, color, y_coords, x_coords, voronoi_border_width, rng)
-
-    noise = generate_perlin_noise_2d((width, height), (image.shape[0] // 4, image.shape[1] // 4), rng=rng)
-    scaled_noise = (noise + 1) * 255 / 2
-    alpha = 0.08
-    image = (image * (1 - alpha) + scaled_noise * alpha).astype(np.uint8)
+        add_perlin_noise(image, rng, alpha, (image.shape[0] // divisor, image.shape[1] // divisor), row, col)
 
     return image
 
@@ -150,13 +141,14 @@ def add_3d_border_effect(mask):
     norm = np.linalg.norm(normals, axis=2, keepdims=True)
     normals /= norm + 1e-8  # avoid division by zero
 
+    # todo light direction correspondence to the emboss?
     light_dir = np.array([-1, -1, 2])
     light_dir = light_dir / np.linalg.norm(light_dir)
 
     shading = np.dot(normals, light_dir)
     shading = np.clip(shading, 0, 1)
     shading = (shading - shading.min()) / (shading.max() - shading.min() + 1e-8)
-    lower, upper = 70, 200
+    lower, upper = 100, 200
     shading = shading * (upper - lower) + lower
 
     return shading
@@ -184,11 +176,12 @@ def slice_lists(row, col, seq_len, rng):
     return new_row, new_col, removed_row, removed_col
 
 
-# todo update this
 def add_perlin_noise(image, rng, alpha, res, row, col):
-    width, height = image.shape
+    height, width = image.shape
     noise = generate_perlin_noise_2d((width, height), res, rng=rng)
-    scaled_noise = (noise + 1) * 255 / 2
-
-    image[row, col] = (image[row, col] * (1 - alpha) + scaled_noise[row, col] * alpha).astype(np.uint8)
+    # * 127.5 so the noise mean is 0
+    noise_amplitude = alpha * 127.5
+    image[row, col] = image[row, col] + noise[row, col] * noise_amplitude
+    image = np.clip(image, 0, 255).astype(np.uint8)
+    return image
 
