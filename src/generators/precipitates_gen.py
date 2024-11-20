@@ -1,32 +1,59 @@
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
+from scipy.special import comb
 from PIL import ImageFilter, Image
+from scipy.interpolate import splprep, splev
 
 
 def add_precipitates(image, seed, *, img_size, precipitate_color, precipitate_num_range, precipitate_size_ranges,
                      precipitate_sizes_distribution, **kwargs):
-    # to do: change the shape generation, probably bezier curves
     rng = np.random.RandomState(seed)
-
-    assert [image.shape[1], image.shape[0]] == img_size
     mask = np.zeros(image.shape)
     precip_num = rng.randint(*precipitate_num_range)
-    angle = rng.randint(0, 180)
     color = precipitate_color
     mask_color = (255, 255, 255)
 
     for _ in range(precip_num):
         center = (rng.randint(0, image.shape[1]), rng.randint(0, image.shape[0]))
-        size = generate_precip_size(rng, precipitate_size_ranges,
-                                    precipitate_sizes_distribution)
-        image = cv2.ellipse(image, center, size, angle, 0, 360, color, -1)
-        mask = cv2.ellipse(mask, center, size, angle, 0, 360, mask_color, -1)
+        # todo adjust the size generation for spline approach
+        size = generate_precip_size(rng, precipitate_size_ranges, precipitate_sizes_distribution)
+        num_segments = min(20, max(8, int(size[0] ** 0.5)))
+        rv = size[0] ** 1/3
+        x, y = generate_shape(num_segments, size[0], rv, center)
 
-    perturb_precip_contour(image, mask, rng, color, mask_color)
+        contour = np.vstack((x, y)).T.astype(np.int32).reshape((-1, 1, 2))
+        contour[:, :, 0] = np.clip(contour[:, :, 0], 0, image.shape[1] - 1)
+        contour[:, :, 1] = np.clip(contour[:, :, 1], 0, image.shape[0] - 1)
+
+        cv2.fillPoly(image, [contour], color)
+        cv2.fillPoly(mask, [contour], mask_color)
+    # perturb_precip_contour(image, mask, rng, color, mask_color)
     image, mask = add_emboss_effect(image, mask)
 
     return image, mask
+
+
+def generate_shape(num_points, radius, radius_variation, center, spline_degree=3, num_spline_points=1000):
+    angles = np.sort(np.random.uniform(0, 2 * np.pi, num_points))
+
+    # generate random radii with variation
+    radii = radius + np.random.uniform(-radius_variation, radius_variation, num_points)
+    radii = np.clip(radii, 0.5 * radius, None)  # so radii are positive and not too small
+
+    # polar to cartesian coordinates
+    x = center[0] + radii * np.cos(angles)
+    y = center[1] + radii * np.sin(angles)
+
+    x = np.append(x, x[0])
+    y = np.append(y, y[0])
+
+    # parametric spline with periodic boundary conditions
+    tck, u, *_ = splprep([x, y], s=10, per=True, k=min(spline_degree, len(x) - 1))
+    u_fine = np.linspace(0, 1, num_spline_points)
+    x_smooth, y_smooth = splev(u_fine, tck)
+
+    return x_smooth, y_smooth
 
 
 def perturb_precip_contour(image, mask, rng, color, mask_color):
