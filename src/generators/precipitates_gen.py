@@ -12,6 +12,7 @@ def add_precipitates(image, seed, *, img_size, precipitate_color, precipitate_nu
     assert [image.shape[1], image.shape[0]] == img_size
     mask = np.zeros(image.shape)
     precip_num = rng.randint(*precipitate_num_range)
+    angle = rng.randint(0, 180)
     color = precipitate_color
     mask_color = (255, 255, 255)
 
@@ -19,7 +20,6 @@ def add_precipitates(image, seed, *, img_size, precipitate_color, precipitate_nu
         center = (rng.randint(0, image.shape[1]), rng.randint(0, image.shape[0]))
         size = generate_precip_size(rng, precipitate_size_ranges,
                                     precipitate_sizes_distribution)
-        angle = rng.randint(0, 180)
         image = cv2.ellipse(image, center, size, angle, 0, 360, color, -1)
         mask = cv2.ellipse(mask, center, size, angle, 0, 360, mask_color, -1)
 
