@@ -56,8 +56,8 @@ def voronoi_bg(seed: int, *, img_size: List[int], voronoi_regions_num_range: Lis
         color = rng.randint(*voronoi_color_range)
         image[row, col] = color
 
-        improve_borders(image, y_coords, x_coords, voronoi_border_width, rng, color, add_3d_effect=True)
-        add_perlin_noise(image, rng, row, col)
+        image = improve_borders(image, y_coords, x_coords, voronoi_border_width, rng, color, add_3d_effect=True)
+        image = add_perlin_noise(image, rng, row, col)
 
     return image
 
@@ -81,7 +81,7 @@ def distort_borders(regions: List[IndexedRegion], vertices: Vertices, width: int
                 # todo set a parameter for num of segments aka border jaggedness
                 base_segments = max(2, int(np.sqrt(line_length) * 0.2))
                 # to how many segments will the line be divided
-                num_segments = max(4, min(12, base_segments + edge_rng.randint(-base_segments//2, base_segments//2)))
+                num_segments = max(4, min(12, base_segments + edge_rng.randint(-base_segments // 2, base_segments // 2)))
                 # changes in x, y coords to make the border jagged
                 noise = max(5, min(10, int(np.sqrt(line_length) * 0.3) + edge_rng.randint(-2, 2)))
 
@@ -111,7 +111,7 @@ def divide_edge(start: Point, end: Point, rng: RandomState, width: int, height: 
 
     noisy_points = [np.array(start)]
     # no need to add randomness to the spacing because noise creates the randomness
-    points = np.linspace(new_start, new_end, num_segments+1)
+    points = np.linspace(new_start, new_end, num_segments + 1)
 
     for i in range(len(points)):
         noise = rng.normal(0, noise_level, size=2)
@@ -140,13 +140,14 @@ def get_distorted_region_coords(modified_borders: Dict[Edge, Vertices], region: 
 
 
 def improve_borders(image: Image, y_coords: Coords, x_coords: Coords, width: int, rng: RandomState, color: int,
-                    add_3d_effect: bool):
+                    add_3d_effect: bool) -> Image:
     """ Gradually thickens and then narrows region borders simulating natural flow. """
 
     perim_row, perim_col = skdraw.polygon_perimeter(y_coords, x_coords, shape=image.shape)
     border_image, border_mask = np.zeros_like(image), np.zeros_like(image)
     border_image[perim_row, perim_col] = 1
     max_width = 6 - width
+    new_image = image.copy()
 
     for i in range(max_width):
         triangle = np.tri(width, width, dtype=np.uint8)
@@ -156,15 +157,17 @@ def improve_borders(image: Image, y_coords: Coords, x_coords: Coords, width: int
         border_image[exclude_row, exclude_col] = 0
         border_mask = np.maximum(n_mask, border_mask)
         width += 1
-    
+
     border_mask.astype(int)
     if not add_3d_effect:
-        image[border_mask == 1] = color + rng.randint(-15, 15)
+        new_image[border_mask == 1] = color + rng.randint(-15, 15)
     else:
         # more dilation for smooth transition from edge to region
         border_mask = skimage.morphology.dilation(border_mask, np.tri(5, 5, dtype=np.uint8))
         grad_shading = compute_3d_border_effect(border_mask)
-        blend_borders_w_bg(border_mask, image, grad_shading)
+        new_image = blend_borders_w_bg(border_mask, new_image, grad_shading)
+
+    return new_image
 
 
 def compute_3d_border_effect(border_mask: BorderMask) -> GradientImage:
@@ -219,17 +222,22 @@ def slice_lists(row: Coords, col: Coords, seq_len: int, rng: RandomState) -> Tup
     return np.array(new_row), np.array(new_col), np.array(removed_row), np.array(removed_col)
 
 
-def blend_borders_w_bg(border_mask: BorderMask, image: Image, grad_shading: GradientImage):
+def blend_borders_w_bg(border_mask: BorderMask, image: Image, grad_shading: GradientImage) -> Image:
+    """ Blends the 3d border effect image with the original image according to the height map. """
     height_map = get_height_map(border_mask, 2)
     border_mask = border_mask.astype(bool)
+    new_image = image.copy()
 
-    image[border_mask] = (height_map[border_mask] * grad_shading[border_mask] +
-                          (1 - height_map[border_mask]) * image[border_mask])
+    new_image[border_mask] = (height_map[border_mask] * grad_shading[border_mask] +
+                              (1 - height_map[border_mask]) * image[border_mask])
+
+    return new_image
 
 
-def add_perlin_noise(image: Image, rng: RandomState, row: Coords, col: Coords):
+def add_perlin_noise(image: Image, rng: RandomState, row: Coords, col: Coords) -> Image:
     """ Adds perlin noise the whole background. """
 
+    new_image = image.copy()
     alpha = max(0.05, min(0.15, rng.random()))
     divisor = rng.choice((2, 4))
     res = (image.shape[0] // divisor, image.shape[1] // divisor)
@@ -238,10 +246,15 @@ def add_perlin_noise(image: Image, rng: RandomState, row: Coords, col: Coords):
     noise = generate_perlin_noise_2d((width, height), res, rng=rng)
     # * 127.5 so the noise mean is 0
     noise_amplitude = alpha * 127.5
-    image[row, col] = image[row, col] + noise[row, col] * noise_amplitude
+    new_image[row, col] = image[row, col] + noise[row, col] * noise_amplitude
+
+    return new_image
 
 
 def get_height_map(border_mask: BorderMask, sigma: float) -> Image:
+    """ Computes an image with high values in the center of voronoi borders which gradually gets smaller allowing to use
+    it as an alpha mask for blending the voronoi borders to the image. """
+
     distance_map = ndimage.distance_transform_edt(border_mask)
     max_distance = np.max(distance_map)
 
