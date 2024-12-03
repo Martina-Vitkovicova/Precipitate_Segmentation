@@ -1,19 +1,19 @@
 import hashlib
-from typing import List, Iterable, Tuple, Union, Dict
+from typing import List, Tuple, Dict, cast
 import cv2
 import numpy as np
 import scipy
 from scipy import ndimage
 import skimage
 import skimage.draw as skdraw
-from numpy.typing import NDArray
 
 from perlin_numpy import generate_perlin_noise_2d
 from src.external_libs.pv_voronoi_gist.colorized_voronoi import voronoi_finite_polygons_2d
+from src.types import Image, IndexedRegion, Vertices, Edge, Point, RandomState, Coords, BorderMask, GradientImage
 
 
 def voronoi_bg(seed: int, *, img_size: List[int], voronoi_regions_num_range: List[int],
-               voronoi_color_range: List[int], voronoi_border_width: int, **kwargs) -> NDArray[NDArray[np.float32]]:
+               voronoi_color_range: List[int], voronoi_border_width: int, **kwargs) -> Image:
     """
     Creates a background matrix image consisting of regions (grains) with borders.
 
@@ -47,7 +47,7 @@ def voronoi_bg(seed: int, *, img_size: List[int], voronoi_regions_num_range: Lis
                                                rng.uniform(0, height, num_points)))
 
     vor = scipy.spatial.Voronoi(region_generator_points)
-    regions, vertices = voronoi_finite_polygons_2d(vor)
+    regions, vertices = cast((List[IndexedRegion], Vertices), voronoi_finite_polygons_2d(vor))
     modified_borders = distort_borders(regions, vertices, width, height)
 
     for region in regions:
@@ -62,8 +62,7 @@ def voronoi_bg(seed: int, *, img_size: List[int], voronoi_regions_num_range: Lis
     return image
 
 
-def distort_borders(regions: Iterable[List[int]], vertices: Union[NDArray[NDArray[np.float32]], Iterable],
-                    width: int, height: int) -> Dict[Tuple[int], NDArray[NDArray[int]]]:
+def distort_borders(regions: List[IndexedRegion], vertices: Vertices, width: int, height: int) -> Dict[Edge, Vertices]:
     """ Transforms borders consisting of straight lines to jagged polylines. """
 
     modified_borders = {}
@@ -92,15 +91,15 @@ def distort_borders(regions: Iterable[List[int]], vertices: Union[NDArray[NDArra
     return modified_borders
 
 
-def get_edge_seed(edge: Tuple[int]) -> int:
+def get_edge_seed(edge: Edge) -> int:
     """ Create a unique seed to set a random generator with. """
 
     edge_bytes = str(edge).encode('utf-8')
     return int(hashlib.sha256(edge_bytes).hexdigest(), 16) % (2 ** 32)
 
 
-def divide_edge(start: Tuple[int], end: Tuple[int], rng: np.random.RandomState, width: int, height: int,
-                num_segments: int = 10, noise_level: int = 10) -> NDArray[NDArray[int]]:
+def divide_edge(start: Point, end: Point, rng: RandomState, width: int, height: int, num_segments: int = 10,
+                noise_level: int = 10) -> Vertices:
     """ Divides a straight line given by start and end point to number of segments and adds noise to the coordinates
     to make the new line jagged. """
 
@@ -122,8 +121,7 @@ def divide_edge(start: Tuple[int], end: Tuple[int], rng: np.random.RandomState, 
     return np.array(noisy_points)
 
 
-def get_distorted_region_coords(modified_borders: Dict[Tuple[int], NDArray[NDArray[int]]], region: List[int]) -> \
-        Tuple[List[Tuple[int]], List[Tuple[int]]]:
+def get_distorted_region_coords(modified_borders: Dict[Edge, Vertices], region: IndexedRegion) -> Tuple[Coords, Coords]:
     """ Return coordinates of the distorted region border. """
 
     y_coords, x_coords = [], []
@@ -138,11 +136,11 @@ def get_distorted_region_coords(modified_borders: Dict[Tuple[int], NDArray[NDArr
         x_coords.extend(poly_edge[:, 0])
         y_coords.extend(poly_edge[:, 1])
 
-    return y_coords, x_coords
+    return np.array(y_coords).astype(int), np.array(x_coords).astype(int)
 
 
-def improve_borders(image: NDArray[NDArray[np.float32]], y_coords: List[Tuple[int]], x_coords: List[Tuple[int]],
-                    width: int, rng: np.random.RandomState, color: int, add_3d_effect: bool):
+def improve_borders(image: Image, y_coords: Coords, x_coords: Coords, width: int, rng: RandomState, color: int,
+                    add_3d_effect: bool):
     """ Gradually thickens and then narrows region borders simulating natural flow. """
 
     perim_row, perim_col = skdraw.polygon_perimeter(y_coords, x_coords, shape=image.shape)
@@ -158,7 +156,8 @@ def improve_borders(image: NDArray[NDArray[np.float32]], y_coords: List[Tuple[in
         border_image[exclude_row, exclude_col] = 0
         border_mask = np.maximum(n_mask, border_mask)
         width += 1
-
+    
+    border_mask.astype(int)
     if not add_3d_effect:
         image[border_mask == 1] = color + rng.randint(-15, 15)
     else:
@@ -168,7 +167,7 @@ def improve_borders(image: NDArray[NDArray[np.float32]], y_coords: List[Tuple[in
         blend_borders_w_bg(border_mask, image, grad_shading)
 
 
-def compute_3d_border_effect(border_mask: NDArray[NDArray[float]]) -> NDArray[NDArray[float]]:
+def compute_3d_border_effect(border_mask: BorderMask) -> GradientImage:
     """ Compute borders colors to make it look like 3D edges. """
 
     # todo do the 3d effect for the whole image at once?
@@ -185,7 +184,7 @@ def compute_3d_border_effect(border_mask: NDArray[NDArray[float]]) -> NDArray[ND
     light_dir = light_dir / np.linalg.norm(light_dir)
 
     # transform the color to specified values range
-    gradient_shading = np.dot(normals, light_dir)
+    gradient_shading = np.dot(normals, light_dir).astype(np.float32)
     gradient_shading = np.clip(gradient_shading, 0, 1)
     gradient_shading = ((gradient_shading - gradient_shading.min()) /
                         (gradient_shading.max() - gradient_shading.min() + 1e-8))
@@ -196,8 +195,7 @@ def compute_3d_border_effect(border_mask: NDArray[NDArray[float]]) -> NDArray[ND
     return gradient_shading
 
 
-def slice_lists(row: List[int], col: List[int], seq_len: int, rng: np.random.RandomState) -> \
-        Tuple[List[int], List[int], List[int], List[int]]:
+def slice_lists(row: Coords, col: Coords, seq_len: int, rng: RandomState) -> Tuple[Coords, Coords, Coords, Coords]:
     """ Helper function for slicing border coordinate indices, used for gradually widening and narrowing the border. """
 
     new_row, new_col, removed_row, removed_col = [], [], [], []
@@ -218,11 +216,10 @@ def slice_lists(row: List[int], col: List[int], seq_len: int, rng: np.random.Ran
             removed_col.extend(col[i:end_index])
         i = end_index
 
-    return new_row, new_col, removed_row, removed_col
+    return np.array(new_row), np.array(new_col), np.array(removed_row), np.array(removed_col)
 
 
-def blend_borders_w_bg(border_mask: NDArray[NDArray[float]], image: NDArray[NDArray[np.float32]],
-                       grad_shading: NDArray[NDArray[float]]):
+def blend_borders_w_bg(border_mask: BorderMask, image: Image, grad_shading: GradientImage):
     height_map = get_height_map(border_mask, 2)
     border_mask = border_mask.astype(bool)
 
@@ -230,7 +227,7 @@ def blend_borders_w_bg(border_mask: NDArray[NDArray[float]], image: NDArray[NDAr
                           (1 - height_map[border_mask]) * image[border_mask])
 
 
-def add_perlin_noise(image: NDArray[NDArray[np.float32]], rng: np.random.RandomState, row: List[int], col: List[int]):
+def add_perlin_noise(image: Image, rng: RandomState, row: Coords, col: Coords):
     """ Adds perlin noise the whole background. """
 
     alpha = max(0.05, min(0.15, rng.random()))
@@ -244,7 +241,7 @@ def add_perlin_noise(image: NDArray[NDArray[np.float32]], rng: np.random.RandomS
     image[row, col] = image[row, col] + noise[row, col] * noise_amplitude
 
 
-def get_height_map(border_mask: NDArray[NDArray[float]], sigma: float) -> NDArray[NDArray[float]]:
+def get_height_map(border_mask: BorderMask, sigma: float) -> Image:
     distance_map = ndimage.distance_transform_edt(border_mask)
     max_distance = np.max(distance_map)
 
@@ -253,4 +250,3 @@ def get_height_map(border_mask: NDArray[NDArray[float]], sigma: float) -> NDArra
     height_map = ndimage.gaussian_filter(height_map, sigma=sigma)
 
     return height_map
-
