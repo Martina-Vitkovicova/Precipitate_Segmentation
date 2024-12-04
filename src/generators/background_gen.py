@@ -9,7 +9,8 @@ import skimage.draw as skdraw
 
 from perlin_numpy import generate_perlin_noise_2d
 from src.external_libs.pv_voronoi_gist.colorized_voronoi import voronoi_finite_polygons_2d
-from src.types import Image, IndexedRegion, Vertices, Edge, Point, RandomState, Coords, BorderMask, GradientImage
+from src.type_definitions import (Image, IndexedRegion, Vertices, Edge, Point, RandomState, Coords, BorderMask,
+                                  GradientImage)
 
 
 def voronoi_bg(seed: int, *, img_size: List[int], voronoi_regions_num_range: List[int],
