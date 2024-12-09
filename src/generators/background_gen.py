@@ -1,5 +1,5 @@
 import hashlib
-from typing import List, Tuple, Dict, cast
+from typing import List, Tuple, Dict
 import cv2
 import numpy as np
 import scipy
@@ -8,7 +8,8 @@ import skimage
 import skimage.draw as skdraw
 
 from perlin_numpy import generate_perlin_noise_2d
-from src.external_libs.pv_voronoi_gist.colorized_voronoi import voronoi_finite_polygons_2d
+
+from src.generators.finite_voronoi_gen import get_finite_voronoi
 from src.type_definitions import (Image, IndexedRegion, Vertices, Edge, Point, RandomState, Coords, BorderMask,
                                   GradientImage)
 
@@ -48,7 +49,7 @@ def voronoi_bg(seed: int, *, img_size: List[int], voronoi_regions_num_range: Lis
                                                rng.uniform(0, height, num_points)))
 
     vor = scipy.spatial.Voronoi(region_generator_points)
-    regions, vertices = cast((List[IndexedRegion], Vertices), voronoi_finite_polygons_2d(vor))
+    regions, vertices = get_finite_voronoi(vor)
     modified_borders = distort_borders(regions, vertices, width, height)
 
     for region in regions:
@@ -142,33 +143,43 @@ def get_distorted_region_coords(modified_borders: Dict[Edge, Vertices], region: 
 
 def improve_borders(image: Image, y_coords: Coords, x_coords: Coords, width: int, rng: RandomState, color: int,
                     add_3d_effect: bool) -> Image:
+    """ Changes the border appearance - width and color. """
+
+    border_mask = change_border_width(image, y_coords, x_coords, rng, width)
+
+    border_mask.astype(int)
+    if not add_3d_effect:
+        new_image = image.copy()
+        new_image[border_mask == 1] = color + rng.randint(-15, 15)
+    else:
+        # more dilation for smooth transition from edge to region
+        border_mask = skimage.morphology.dilation(border_mask, np.tri(5, 5, dtype=np.uint8))
+        grad_shading = compute_3d_border_effect(border_mask)
+        new_image = blend_borders_w_bg(border_mask, image, grad_shading)
+
+    return new_image
+
+
+def change_border_width(image: Image, y_coords: Coords, x_coords: Coords, rng: RandomState, width: int) -> BorderMask:
     """ Gradually thickens and then narrows region borders simulating natural flow. """
 
-    perim_row, perim_col = skdraw.polygon_perimeter(y_coords, x_coords, shape=image.shape)
     border_image, border_mask = np.zeros_like(image), np.zeros_like(image)
+    perim_row, perim_col = skdraw.polygon_perimeter(y_coords, x_coords, shape=image.shape)
     border_image[perim_row, perim_col] = 1
     max_width = 6 - width
-    new_image = image.copy()
 
     for i in range(max_width):
         triangle = np.tri(width, width, dtype=np.uint8)
         n_mask = skimage.morphology.dilation(border_image, triangle)
         seq_length = rng.randint(50 // (i + 1), 100 // (i + 1))
         perim_row, perim_col, exclude_row, exclude_col = slice_lists(perim_row, perim_col, seq_length, rng)
-        border_image[exclude_row, exclude_col] = 0
-        border_mask = np.maximum(n_mask, border_mask)
-        width += 1
-
-    border_mask.astype(int)
-    if not add_3d_effect:
-        new_image[border_mask == 1] = color + rng.randint(-15, 15)
-    else:
-        # more dilation for smooth transition from edge to region
-        border_mask = skimage.morphology.dilation(border_mask, np.tri(5, 5, dtype=np.uint8))
-        grad_shading = compute_3d_border_effect(border_mask)
-        new_image = blend_borders_w_bg(border_mask, new_image, grad_shading)
-
-    return new_image
+        if len(exclude_col) > 0 and len(exclude_row) > 0:
+            border_image[exclude_row, exclude_col] = 0
+            border_mask = np.maximum(n_mask, border_mask)
+            width += 1
+        else:
+            break
+    return border_mask
 
 
 def compute_3d_border_effect(border_mask: BorderMask) -> GradientImage:

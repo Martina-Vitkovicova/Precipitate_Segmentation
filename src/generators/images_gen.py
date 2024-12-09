@@ -5,8 +5,8 @@ from pathlib import Path
 import numpy as np
 from matplotlib import pyplot as plt
 
-from generators.background_gen import voronoi_bg
-from generators.precipitates_gen import add_precipitates
+from src.generators.background_gen import voronoi_bg
+from src.generators.precipitates_gen import add_precipitates
 
 
 def generate_image(root_seed, img_params_path):
@@ -47,11 +47,3 @@ def save_metadata(img_params_path, seed, gen, path):
     with open(path / "metadata.json", 'w') as file:
         json.dump(updated_img_params, file, indent=4)
 
-
-def show_image_mask(img, mask):
-    fig, axes = plt.subplots(1, 2, figsize=(15, 5))
-    axes[0].imshow(img, cmap='gray')
-    axes[0].axis('off')
-    axes[1].imshow(mask, cmap='gray')
-    axes[1].axis('off')
-    plt.show()

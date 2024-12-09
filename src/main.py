@@ -1,6 +1,7 @@
 import numpy as np
 
-from generators.images_gen import generate_image, save_images, show_image_mask
+from generators.images_gen import generate_image
+from src.image_visualization import show_image_mask
 
 GENERATION = 12
 IMG_PARAMS_PATH = "../config/img_params.json"
