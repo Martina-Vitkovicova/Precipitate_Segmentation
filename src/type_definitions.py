@@ -1,4 +1,4 @@
-from typing import TypeAlias, List, Tuple
+from typing import TypeAlias, List, Tuple, Dict
 import numpy as np
 from numpy.typing import NDArray
 
@@ -28,3 +28,12 @@ BorderMask: TypeAlias = NDArray[np.uint8]
 
 # Represents a 1D NumPy array of integers for x or y coordinates
 Coords: TypeAlias = NDArray[int]
+
+# A ridge is represented as a tuple of (adjacent_point_index, ridge_vertex_index1, ridge_vertex_index2)
+VoronoiRidge: TypeAlias = Tuple[int, int, int]
+
+# Dictionary where keys are ridge point indices and values are lists of ridge tuples
+AllRidges: TypeAlias = Dict[int, List[VoronoiRidge]]
+
+# Consists of two float coordinates stored in a NumPy array
+FloatPoint: TypeAlias = NDArray[np.float64]
