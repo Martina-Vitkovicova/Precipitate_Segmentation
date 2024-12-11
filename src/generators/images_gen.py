@@ -5,9 +5,8 @@ from pathlib import Path
 import numpy as np
 from matplotlib import pyplot as plt
 
-from background_gen import voronoi_bg
-from precipitates_gen import add_precipitates
-from perlin_numpy import generate_perlin_noise_2d
+from src.generators.background_gen import voronoi_bg
+from src.generators.precipitates_gen import add_precipitates
 
 
 def generate_image(root_seed, img_params_path):
@@ -20,20 +19,8 @@ def generate_image(root_seed, img_params_path):
 
     background = voronoi_bg(vor_seed, **img_params)
     image, mask = add_precipitates(background, precip_seed, **img_params)
-    image = add_perlin_noise(image, rng)
 
     return image, mask
-
-
-def add_perlin_noise(image, rng):
-    width, height = image.shape
-    noise = generate_perlin_noise_2d((width, height), (width // 4, height // 4), rng=rng)
-    scaled_noise = (noise + 1) * 255 / 2
-
-    alpha = 0.05
-    blended_image = (image * (1 - alpha) + scaled_noise * alpha).astype(np.uint8)
-
-    return blended_image
 
 
 def save_images(root_path, seed, img, mask, img_params_path=None, gen=1):
@@ -59,3 +46,4 @@ def save_metadata(img_params_path, seed, gen, path):
 
     with open(path / "metadata.json", 'w') as file:
         json.dump(updated_img_params, file, indent=4)
+
