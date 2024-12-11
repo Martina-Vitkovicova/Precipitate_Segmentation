@@ -78,17 +78,8 @@ def distort_borders(regions: List[IndexedRegion], vertices: Vertices, width: int
                 edge_seed = get_edge_seed(sorted_edge)
                 edge_rng = np.random.RandomState(edge_seed)
                 v1, v2 = vertices[sorted_edge[0]], vertices[sorted_edge[1]]
-
-                line_length = np.linalg.norm(v2 - v1)
-                # todo set a parameter for num of segments aka border jaggedness
-                base_segments = max(2, int(np.sqrt(line_length) * 0.2))
-                # to how many segments will the line be divided
-                num_segments = max(4, min(12, base_segments + edge_rng.randint(-base_segments // 2, base_segments // 2)))
-                # changes in x, y coords to make the border jagged
-                noise = max(5, min(10, int(np.sqrt(line_length) * 0.3) + edge_rng.randint(-2, 2)))
-
                 v1, v2 = tuple(map(int, v1)), tuple(map(int, v2))
-                modified_borders[sorted_edge] = divide_edge(v1, v2, edge_rng, width, height, num_segments, noise)
+                modified_borders[sorted_edge] = divide_edge(v1, v2, edge_rng, width, height)
 
     return modified_borders
 
@@ -100,8 +91,7 @@ def get_edge_seed(edge: Edge) -> int:
     return int(hashlib.sha256(edge_bytes).hexdigest(), 16) % (2 ** 32)
 
 
-def divide_edge(start: Point, end: Point, rng: RandomState, width: int, height: int, num_segments: int = 10,
-                noise_level: int = 10) -> Vertices:
+def divide_edge(start: Point, end: Point, rng: RandomState, width: int, height: int) -> Vertices:
     """ Divides a straight line given by start and end point to number of segments and adds noise to the coordinates
     to make the new line jagged. """
 
@@ -112,6 +102,14 @@ def divide_edge(start: Point, end: Point, rng: RandomState, width: int, height: 
         return np.array([np.array(start), np.array(end)])
 
     noisy_points = [np.array(start)]
+
+    line_length = np.linalg.norm(np.array(new_end) - np.array(new_start))
+    # todo set a parameter for num of segments aka border jaggedness
+    base_segments = max(2, int(np.sqrt(line_length) * 0.2))
+    # changes in x, y coords to make the border jagged
+    noise_level = max(5, min(10, int(np.sqrt(line_length) * 0.5) + rng.randint(-2, 2)))
+    # to how many segments will the line be divided
+    num_segments = max(4, min(12, base_segments + rng.randint(-base_segments // 2, base_segments // 2)))
     # no need to add randomness to the spacing because noise creates the randomness
     points = np.linspace(new_start, new_end, num_segments + 1)
 
