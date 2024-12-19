@@ -1,11 +1,7 @@
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
-from scipy.special import comb
-from PIL import ImageFilter, Image
 from scipy.interpolate import splprep, splev
-
-from src.generators.background_gen import blend_borders_w_bg
 
 
 def add_precipitates(image, seed, *, precipitate_color, precipitate_num_range, precipitate_size_ranges,
@@ -22,9 +18,10 @@ def add_precipitates(image, seed, *, precipitate_color, precipitate_num_range, p
         # todo adjust the size generation for spline approach
         size = generate_precip_size(rng, precipitate_size_ranges, precipitate_sizes_distribution)
 
-        num_segments = min(20, max(8, int(size[0] ** 0.5)))
-        rv = size[0] ** 1 / 3
-        x, y = generate_shape(num_segments, size[0], rv, center)
+        radius = size[0]
+        num_segments = min(20, max(8, int(radius ** 0.5)))
+        rv = radius ** 1 / 3
+        x, y = generate_shape(num_segments, radius, rv, center)
 
         contour = np.vstack((x, y)).T.astype(np.int32).reshape((-1, 1, 2))
         contour[:, :, 0] = np.clip(contour[:, :, 0], 0, image.shape[1] - 1)
@@ -33,9 +30,7 @@ def add_precipitates(image, seed, *, precipitate_color, precipitate_num_range, p
         cv2.fillPoly(image, [contour], color)
         cv2.fillPoly(mask, [contour], mask_color)
         cv2.fillPoly(temp_mask, [contour], mask_color)
-        image, mask = add_individual_emboss(temp_mask, image, mask, size, mask_color, rng)
-        # plt.imshow(image, cmap="gray", vmin=0, vmax=255)
-        # plt.show()
+        image = add_individual_emboss(temp_mask, image, radius, rng)
 
     return image, mask
 
@@ -62,66 +57,26 @@ def generate_shape(num_points, radius, radius_variation, center, spline_degree=3
     return x_smooth, y_smooth
 
 
-def perturb_precip_contour(image, mask, rng, color, mask_color):
-    contours, _ = cv2.findContours(mask.astype(np.uint8), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+def add_individual_emboss(temp_mask, image, radius, rng):
+    effect_size = compute_emboss_size(radius, rng)
 
-    for cont in contours:
-        _, _, width, height = cv2.boundingRect(cont)
-        noise_deviation = min(width, height) / 2 + 1
-        smoothing = noise_deviation * 0.8
-        noise = generate_smooth_noise(cont, rng, noise_deviation, smoothing)
-        cont += noise
+    shading, shading_mask = compute_gradient_shading(temp_mask, effect_size)
 
-    cv2.drawContours(image, contours, -1, color, -1)
-    cv2.drawContours(mask, contours, -1, mask_color, -1)
-
-
-def generate_smooth_noise(contour, rng, max_noise, smoothing):
-    noise = np.array(rng.normal(0, max_noise, (len(contour), 1, 2))).astype(np.float32)
-    smooth_noise = cv2.GaussianBlur(noise, (0, 0), sigmaX=smoothing, sigmaY=smoothing,
-                                    borderType=cv2.BORDER_REFLECT)
-
-    return smooth_noise.astype(np.int32)
-
-
-def add_individual_emboss(temp_mask, image, mask, size, mask_color, rng):
-    effect_size = compute_emboss_size(*size, rng)
-
-    shading = compute_gradient_shading(temp_mask, effect_size)
-    border = get_border_from_mask(temp_mask, effect_size, 0.8)
-    ksize = (effect_size) | 1
-    blurred_border = cv2.GaussianBlur(border, (ksize, ksize), sigmaX=0)
-    blurred_border = adjust_image_value_range(blurred_border, 20, 205)
-    # plt.imshow(border, cmap="gray", vmin=0, vmax=255)
-    plt.show()
+    blurred_border = cv2.GaussianBlur(shading_mask.astype(float), (effect_size, effect_size), sigmaX=0)
+    shading_strength = rng.randint(80, 200)
+    blurred_border = adjust_image_value_range(blurred_border, 20, shading_strength)
     alpha = blurred_border.astype(np.float32) / 255.0
-    # plt.imshow(alpha, cmap="gray", vmin=0, vmax=1)
-    plt.show()
 
     temp_mask = temp_mask.astype(bool)
     image[temp_mask] = (alpha[temp_mask] * shading[temp_mask] + (1 - alpha[temp_mask]) * image[temp_mask])
-    # np.copyto(mask, mask_color[0], where=().astype(bool))
 
-    return image, mask
-
-
-def get_border_from_mask(temp_mask, size, scaled):
-    kernel = np.ones((size, size), np.uint8)
-    if scaled < 1:
-        new_temp_mask = cv2.erode(temp_mask, kernel, iterations=1)
-    else:
-        new_temp_mask = cv2.dilate(temp_mask, kernel, iterations=1)
-    eroded = cv2.erode(new_temp_mask, kernel, iterations=1)
-    border = new_temp_mask - eroded
-
-    # todo fix small precips not finding the border
-    if border.max == 0:
-        return temp_mask
-
-    return border
+    return image
 
 
 def compute_gradient_shading(temp_mask, size):
+    # need to make the mask smaller since the gradient is computed around the border
+    erosion = int(size // 4)
+    temp_mask = cv2.erode(temp_mask, np.ones((erosion, erosion), np.uint8), iterations=1)
     elevation = np.pi / 2.5  # radians
     azimuth = np.pi / 2.2  # where is the light source
     depth = 20  # how high is the light source - changes the light strength
@@ -135,12 +90,13 @@ def compute_gradient_shading(temp_mask, size):
     # Compute shading using dot product
     shading = 255 * np.tensordot(light_dir, unit_normals, axes=(0, 0))
     only_shading = remove_shading_background(shading)
-    shading_blurred = cv2.GaussianBlur(only_shading, (size, size), sigmaX=0)
-    shading_normalized = adjust_image_value_range(shading_blurred, 40, 240)
-    # plt.imshow(shading_blurred, cmap="gray", vmin=0, vmax=255)
-    # plt.show()
+    shading_mask = (only_shading > 0).astype(bool)
 
-    return shading_normalized
+    ksize = size // 2 | 1
+    shading_blurred = cv2.GaussianBlur(only_shading, (ksize, ksize), sigmaX=0)
+    shading_normalized = adjust_image_value_range(shading_blurred, 40, 240)
+
+    return shading_normalized, shading_mask
 
 
 def remove_shading_background(shading):
@@ -174,29 +130,12 @@ def adjust_image_value_range(image, low, high):
     return scaled
 
 
-def compute_emboss_size(precip_size_x, precip_size_y, rng):
-    size = int(((precip_size_x + precip_size_y) / 2) ** 1 / 2) + 1
+def compute_emboss_size(radius, rng):
+    size = int(radius ** 1 / 2) + 1
     size += rng.randint(- size // 2, size // 2)
     size = size if size % 2 == 1 else size + 1
 
     return size
-
-
-def add_emboss_effect(image, mask):
-    grad_x = cv2.Sobel(mask, cv2.CV_64F, 1, 0, ksize=3)
-    grad_y = cv2.Sobel(mask, cv2.CV_64F, 0, 1, ksize=3)
-
-    magnitude = np.sqrt(grad_x ** 2 + grad_y ** 2)
-    direction = np.degrees(np.arctan2(grad_y, grad_x))
-    direction = ((direction + 180) % 360)
-
-    # copy just the effect of emboss, otherwise the image will be mostly grey
-    emboss_effect = magnitude > 128
-
-    image[emboss_effect] = direction[emboss_effect]
-    mask[emboss_effect] = 255
-
-    return image, mask
 
 
 def generate_precip_size(rng, size_ranges, distribution, joined_size_distribution=True):
