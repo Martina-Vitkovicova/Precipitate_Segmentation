@@ -4,8 +4,8 @@ import numpy as np
 from scipy.interpolate import splprep, splev
 
 
-def add_precipitates(image, seed, *, precipitate_color, precipitate_num_range, precipitate_size_ranges,
-                     precipitate_sizes_distribution, **kwargs):
+def add_precipitates(image, seed, *, precipitate_color, precipitate_num_range, precipitate_size_range,
+                     precipitate_size_distribution, **kwargs):
     rng = np.random.RandomState(seed)
     mask = np.zeros(image.shape)
     precip_num = rng.randint(*precipitate_num_range)
@@ -15,10 +15,8 @@ def add_precipitates(image, seed, *, precipitate_color, precipitate_num_range, p
     for _ in range(precip_num):
         temp_mask = np.zeros_like(image)
         center = (rng.randint(0, image.shape[1]), rng.randint(0, image.shape[0]))
-        # todo adjust the size generation for spline approach
-        size = generate_precip_size(rng, precipitate_size_ranges, precipitate_sizes_distribution)
+        radius = generate_precip_size(rng, precipitate_size_range, precipitate_size_distribution)
 
-        radius = size[0]
         num_segments = min(20, max(8, int(radius ** 0.5)))
         rv = radius ** 1 / 3
         x, y = generate_shape(num_segments, radius, rv, center)
@@ -138,33 +136,11 @@ def compute_emboss_size(radius, rng):
     return size
 
 
-def generate_precip_size(rng, size_ranges, distribution, joined_size_distribution=True):
-    sizes = []
-    for size_range in size_ranges:
-        breaks = np.ceil(np.linspace(start=size_range[0], stop=size_range[1], num=len(distribution) + 1))
-        intervals = [(breaks[i], breaks[i + 1]) for i in range(len(breaks) - 1)]
-        total = sum(distribution)
-        probabilities = [p / total for p in distribution]
+def generate_precip_size(rng, size_range, distribution):
+    breaks = np.ceil(np.linspace(size_range[0], size_range[1], len(distribution) + 1)).astype(int)
+    probabilities = np.array(distribution) / np.sum(distribution)
+    chosen_index = rng.choice(len(distribution), p=probabilities)
 
-        chosen_interval = rng.choice(len(intervals), p=probabilities)
-        low, high = intervals[chosen_interval]
-        sizes.append(rng.randint(low, high))
+    size = rng.randint(breaks[chosen_index], breaks[chosen_index + 1])
 
-        if joined_size_distribution:
-            distribution = adjust_precip_size_distribution(chosen_interval, distribution)
-
-    return sizes
-
-
-def adjust_precip_size_distribution(interval, distribution):
-    # if the size along one axis is big, adjust the distribution so that it's more probable that the other side
-    # will be big too
-    if interval > len(distribution) // 2:
-        distribution = list(distribution)
-        value_to_add = distribution[0] // 2
-        for i in range(len(distribution) // 2, len(distribution)):
-            decay_rate = 0.6
-            distribution[i] += value_to_add
-            value_to_add *= decay_rate
-
-    return distribution
+    return size
