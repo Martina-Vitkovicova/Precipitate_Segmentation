@@ -1,13 +1,17 @@
-import copy
+from typing import List, Tuple
 
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
+from numpy.typing import NDArray
 from scipy.interpolate import splprep, splev
 
+from src.type_definitions import Image, Color, Point, RandomState, Mask, Contour, Coords
 
-def add_precipitates(image, seed, *, precipitate_color, precipitate_num_range, precipitate_size_range,
-                     precipitate_size_distribution, **kwargs):
+
+def add_precipitates(image: Image, seed: int, *, precipitate_color: Color, precipitate_num_range: List[int],
+                     precipitate_size_range: List[int], precipitate_size_distribution: List[int], **kwargs) \
+        -> Tuple[Image, Mask]:
     rng = np.random.RandomState(seed)
     mask = np.zeros(image.shape)
     precip_num = rng.randint(*precipitate_num_range)
@@ -16,32 +20,41 @@ def add_precipitates(image, seed, *, precipitate_color, precipitate_num_range, p
 
     for _ in range(precip_num):
         temp_mask = np.zeros_like(image)
-        center = (rng.randint(0, image.shape[1]), rng.randint(0, image.shape[0]))
         radius = generate_precip_size(rng, precipitate_size_range, precipitate_size_distribution)
-
-        num_segments = min(20, max(8, int(radius ** 0.5)))
-        rv = radius ** 1 / 3
-        x, y = generate_shape(num_segments, radius, rv, center)
-
-        contour = np.vstack((x, y)).T.astype(np.int32).reshape((-1, 1, 2))
-        contour[:, :, 0] = np.clip(contour[:, :, 0], 0, image.shape[1] - 1)
-        contour[:, :, 1] = np.clip(contour[:, :, 1], 0, image.shape[0] - 1)
+        contour = generate_precipitate_contour(image, radius, rng)
 
         cv2.fillPoly(image, [contour], color)
         cv2.fillPoly(mask, [contour], mask_color)
         cv2.fillPoly(temp_mask, [contour], mask_color)
         image = add_individual_emboss(temp_mask, image, radius, rng)
+
     image = add_feather_effect(image, mask)
 
     return image, mask
 
 
-def generate_shape(num_points, radius, radius_variation, center, spline_degree=3, num_spline_points=1000):
+def generate_precipitate_contour(image: Image, radius: int, rng: RandomState) -> Contour:
+    center = (rng.randint(0, image.shape[1]), rng.randint(0, image.shape[0]))
+
+    num_segments = min(20, max(8, int(radius ** 0.5)))
+    radius_variation = radius ** 1 / 3
+
+    x, y = generate_shape_coords(num_segments, radius, radius_variation, center)
+    contour = np.vstack((x, y)).T.reshape((-1, 1, 2))
+
+    # contour[:, :, 0] = np.clip(contour[:, :, 0], 0, image.shape[1] - 1)
+    # contour[:, :, 1] = np.clip(contour[:, :, 1], 0, image.shape[0] - 1)
+
+    return contour
+
+
+def generate_shape_coords(num_points: int, radius: int, radius_variation: float, center: Point, spline_degree: int = 3,
+                          num_spline_points: int = 1000) -> Tuple[Coords, Coords]:
     angles = np.sort(np.random.uniform(0, 2 * np.pi, num_points))
 
     # generate random radii with variation
     radii = radius + np.random.uniform(-radius_variation, radius_variation, num_points)
-    radii = np.clip(radii, 0.5 * radius, None)  # so radii are positive and not too small
+    radii = np.clip(radii, 0.5 * radius, None)
 
     # polar to cartesian coordinates
     x = center[0] + radii * np.cos(angles)
@@ -54,11 +67,12 @@ def generate_shape(num_points, radius, radius_variation, center, spline_degree=3
     tck, u, *_ = splprep([x, y], s=10, per=True, k=min(spline_degree, len(x) - 1))
     u_fine = np.linspace(0, 1, num_spline_points)
     x_smooth, y_smooth = splev(u_fine, tck)
+    x_coords, y_coords = np.array(x_smooth).astype(np.int32), np.array(y_smooth).astype(np.int32)
 
-    return x_smooth, y_smooth
+    return x_coords, y_coords
 
 
-def add_individual_emboss(temp_mask, image, radius, rng):
+def add_individual_emboss(temp_mask: Mask, image: Image, radius: int, rng: RandomState) -> Image:
     effect_size = compute_emboss_size(radius, rng)
 
     shading, shading_mask = compute_gradient_shading(temp_mask, effect_size)
@@ -74,7 +88,7 @@ def add_individual_emboss(temp_mask, image, radius, rng):
     return image
 
 
-def compute_gradient_shading(temp_mask, size):
+def compute_gradient_shading(temp_mask: Mask, size: int) -> Tuple[Image, Mask]:
     # need to make the mask smaller since the gradient is computed around the border
     erosion = int(size // 4)
     temp_mask = cv2.erode(temp_mask, np.ones((erosion, erosion), np.uint8), iterations=1)
@@ -89,7 +103,7 @@ def compute_gradient_shading(temp_mask, size):
     unit_normals = get_unit_normals(temp_mask, size, depth)
 
     # Compute shading using dot product
-    shading = 255 * np.tensordot(light_dir, unit_normals, axes=(0, 0))
+    shading = 255.0 * np.tensordot(light_dir, unit_normals, axes=(0, 0))
     only_shading = remove_shading_background(shading)
     shading_mask = (only_shading > 0).astype(bool)
 
@@ -100,7 +114,7 @@ def compute_gradient_shading(temp_mask, size):
     return shading_normalized, shading_mask
 
 
-def remove_shading_background(shading):
+def remove_shading_background(shading: Image) -> Image:
     image_8bit = cv2.convertScaleAbs(shading)
     _, border = cv2.threshold(image_8bit, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
     eroded = cv2.erode(border, np.ones((2, 2), np.uint8), iterations=1)
@@ -109,7 +123,7 @@ def remove_shading_background(shading):
     return shading
 
 
-def get_unit_normals(temp_mask, size, depth):
+def get_unit_normals(temp_mask: Mask, size: int, depth: int) -> NDArray[np.float32]:
     # blur the mask to increase the gradient area
     temp_mask_blurred = cv2.GaussianBlur(temp_mask, (size, size), 2.0)
     grad_x, grad_y = np.gradient(temp_mask_blurred)
@@ -121,7 +135,7 @@ def get_unit_normals(temp_mask, size, depth):
     return unit_normals
 
 
-def adjust_image_value_range(image, low, high):
+def adjust_image_value_range(image: Image, low: int, high: int) -> Image:
     image = np.clip(image, 0, 255)
     image_min, image_max = image.min(), image.max()
     if image_max == image_min:
@@ -131,7 +145,7 @@ def adjust_image_value_range(image, low, high):
     return scaled
 
 
-def compute_emboss_size(radius, rng):
+def compute_emboss_size(radius: int, rng: RandomState) -> int:
     size = int(radius ** 1 / 2) + 1
     size += rng.randint(- size // 2, size // 2)
     size = size if size % 2 == 1 else size + 1
@@ -139,7 +153,7 @@ def compute_emboss_size(radius, rng):
     return size
 
 
-def generate_precip_size(rng, size_range, distribution):
+def generate_precip_size(rng: RandomState, size_range: List[int], distribution: List[int]) -> int:
     breaks = np.ceil(np.linspace(size_range[0], size_range[1], len(distribution) + 1)).astype(int)
     probabilities = np.array(distribution) / np.sum(distribution)
     chosen_index = rng.choice(len(distribution), p=probabilities)
@@ -149,7 +163,7 @@ def generate_precip_size(rng, size_range, distribution):
     return size
 
 
-def add_feather_effect(image, mask):
+def add_feather_effect(image: Image, mask: Mask) -> Image:
     dilated_mask = cv2.dilate(mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)))
     eroded_mask = cv2.erode(mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2, 2)))
 

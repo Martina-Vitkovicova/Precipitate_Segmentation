@@ -18,7 +18,7 @@ IndexedRegion: TypeAlias = List[int]
 Edge: TypeAlias = Tuple[int]
 
 # Represents a point as a tuple of two integers (x, y)
-Point: TypeAlias = Tuple[int]
+Point: TypeAlias = Tuple[int, int]
 
 # Represents a NumPy random number generator
 RandomState: TypeAlias = np.random.RandomState
@@ -37,3 +37,15 @@ AllRidges: TypeAlias = Dict[int, List[VoronoiRidge]]
 
 # Consists of two float coordinates stored in a NumPy array
 FloatPoint: TypeAlias = NDArray[np.float64]
+
+# Three ints for grayscale color
+# Todo Should change to float
+Color: TypeAlias = List[int]
+
+# Binary mask with precipitates
+Mask: TypeAlias = NDArray[np.float32]
+
+# NDArray of shape (num_spline_points, 1, 2) used by cv2 to fill contours
+Contour: TypeAlias = NDArray[np.int32]
+
+#
