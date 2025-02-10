@@ -1,3 +1,5 @@
+import copy
+
 import cv2
 import matplotlib.pyplot as plt
 import numpy as np
@@ -29,6 +31,7 @@ def add_precipitates(image, seed, *, precipitate_color, precipitate_num_range, p
         cv2.fillPoly(mask, [contour], mask_color)
         cv2.fillPoly(temp_mask, [contour], mask_color)
         image = add_individual_emboss(temp_mask, image, radius, rng)
+    image = add_feather_effect(image, mask)
 
     return image, mask
 
@@ -144,3 +147,16 @@ def generate_precip_size(rng, size_range, distribution):
     size = rng.randint(breaks[chosen_index], breaks[chosen_index + 1])
 
     return size
+
+
+def add_feather_effect(image, mask):
+    dilated_mask = cv2.dilate(mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (3, 3)))
+    eroded_mask = cv2.erode(mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (2, 2)))
+
+    loop_mask = cv2.absdiff(dilated_mask, eroded_mask)
+    blurred_mask = cv2.GaussianBlur(loop_mask.astype(np.float32) / 255.0, (3, 3), 1)
+    blurred_image = cv2.GaussianBlur(image, (5, 5), 2)
+
+    feathered_image = (image * (1 - blurred_mask) + blurred_image * blurred_mask)
+
+    return feathered_image
