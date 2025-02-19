@@ -39,7 +39,7 @@ def generate_precipitate_contour(image: Image, radius: int, rng: RandomState) ->
     num_segments = min(20, max(8, int(radius ** 0.5)))
     radius_variation = radius ** 1 / 3
 
-    x, y = generate_shape_coords(num_segments, radius, radius_variation, center)
+    x, y = generate_shape_coords(num_segments, radius, radius_variation, center, rng)
     contour = np.vstack((x, y)).T.reshape((-1, 1, 2))
 
     # contour[:, :, 0] = np.clip(contour[:, :, 0], 0, image.shape[1] - 1)
@@ -48,12 +48,12 @@ def generate_precipitate_contour(image: Image, radius: int, rng: RandomState) ->
     return contour
 
 
-def generate_shape_coords(num_points: int, radius: int, radius_variation: float, center: Point, spline_degree: int = 3,
-                          num_spline_points: int = 1000) -> Tuple[Coords, Coords]:
-    angles = np.sort(np.random.uniform(0, 2 * np.pi, num_points))
+def generate_shape_coords(num_points: int, radius: int, radius_variation: float, center: Point, rng: RandomState,
+                          spline_degree: int = 3, num_spline_points: int = 1000) -> Tuple[Coords, Coords]:
+    angles = np.sort(rng.uniform(0, 2 * np.pi, num_points))
 
     # generate random radii with variation
-    radii = radius + np.random.uniform(-radius_variation, radius_variation, num_points)
+    radii = radius + rng.uniform(-radius_variation, radius_variation, num_points)
     radii = np.clip(radii, 0.5 * radius, None)
 
     # polar to cartesian coordinates
