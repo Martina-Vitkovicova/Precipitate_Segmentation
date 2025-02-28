@@ -32,4 +32,4 @@ def generate(num=1, gen=14, img_params_path="../config/img_params.json", img_sav
 
 
 if __name__ == "__main__":
-    generate(gen=GENERATION, img_params_path=IMG_PARAMS_PATH, img_save_path=IMG_SAVE_PATH, save=False)
+    generate(gen=GENERATION, img_params_path=IMG_PARAMS_PATH, img_save_path=IMG_SAVE_PATH, save=False, random_seeds=True, num=10)

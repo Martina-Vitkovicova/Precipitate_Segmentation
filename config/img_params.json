@@ -1,10 +1,10 @@
 {
   "img_size": [1024, 1024],
-  "precipitate_num_range": [100, 150],
+  "precipitate_num_range": [1, 2],
   "precipitate_color": [25, 25, 25],
-  "precipitate_size_range": [2, 45],
-  "precipitate_size_distribution": [2200, 30, 25, 15, 10, 6, 3, 1],
-  "voronoi_regions_num_range": [20, 30],
+  "precipitate_size_range": [30, 35],
+  "precipitate_size_distribution": [4, 3, 2],
+  "voronoi_regions_num_range": [14, 15],
   "voronoi_color_range": [120, 150],
-  "voronoi_border_width": 3
+  "voronoi_border_width": 4
 }
