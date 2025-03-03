@@ -18,7 +18,7 @@ IndexedRegion: TypeAlias = List[int]
 Edge: TypeAlias = Tuple[int]
 
 # Represents a point as a tuple of two integers (x, y)
-Point: TypeAlias = Tuple[int, int]
+Point: TypeAlias = Tuple[int]
 
 # Represents a NumPy random number generator
 RandomState: TypeAlias = np.random.RandomState

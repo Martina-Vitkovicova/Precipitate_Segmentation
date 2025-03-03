@@ -1,9 +1,9 @@
-from typing import Tuple, List, Optional
+from typing import Tuple, List, Optional, Dict
 
 import numpy as np
 from scipy.spatial import Voronoi
 
-from src.type_definitions import IndexedRegion, Vertices, AllRidges, FloatPoint
+from src.type_definitions import IndexedRegion, Vertices, AllRidges, FloatPoint, Edge
 
 
 def _build_all_ridges(vor: Voronoi) -> AllRidges:
@@ -47,8 +47,8 @@ def _compute_far_point(p1: int, p2: int, v2: int, vor: Voronoi, radius: float) -
     return far_point
 
 
-def _make_region_finite(p1: int, region: IndexedRegion, vor: Voronoi, radius: float, new_vertices: Vertices) \
-        -> Tuple[IndexedRegion, Vertices]:
+def _make_region_finite(p1: int, region: IndexedRegion, vor: Voronoi, radius: float, new_vertices: Vertices,
+                        added_points: Dict[Edge, int]) -> Tuple[IndexedRegion, Vertices]:
     """ For a region that has infinite edges, extend these edges to 'far points' making the region finite. """
     new_region = _get_finite_vertices(region)
     all_ridges = _build_all_ridges(vor)
@@ -61,9 +61,17 @@ def _make_region_finite(p1: int, region: IndexedRegion, vor: Voronoi, radius: fl
             # finite ridge: already in the region
             continue
 
-        far_point = _compute_far_point(p1, p2, v2, vor, radius)
-        new_vertices = np.vstack([new_vertices, far_point])
-        new_region.append(len(new_vertices) - 1)
+        # Check if the far point was already computed for this edge
+        sorted_edge = tuple(sorted((p1, p2)))
+        if sorted_edge in added_points:
+            point_index = added_points[sorted_edge]
+        else:
+            far_point = _compute_far_point(p1, p2, v2, vor, radius)
+            new_vertices = np.vstack([new_vertices, far_point])
+            point_index = len(new_vertices) - 1
+            added_points[sorted_edge] = point_index
+
+        new_region.append(point_index)
 
     sorted_region = _sort_region_counterclockwise(new_vertices, new_region)
     return sorted_region, new_vertices
@@ -93,6 +101,7 @@ def get_finite_voronoi(vor: Voronoi, radius: Optional[float] = None) -> Tuple[Li
     if radius is None:
         radius = 1000
 
+    added_points = {}
     new_regions = []
     new_vertices = vor.vertices.copy()
 
@@ -102,7 +111,7 @@ def get_finite_voronoi(vor: Voronoi, radius: Optional[float] = None) -> Tuple[Li
         if _is_region_finite(region):
             new_regions.append(region)
         else:
-            new_region, new_vertices = _make_region_finite(p1, region, vor, radius, new_vertices)
+            new_region, new_vertices = _make_region_finite(p1, region, vor, radius, new_vertices, added_points)
             new_regions.append(new_region)
 
     return new_regions, new_vertices

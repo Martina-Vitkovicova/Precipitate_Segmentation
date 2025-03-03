@@ -46,14 +46,16 @@ def voronoi_bg(seed: int, *, img_size: List[int], voronoi_regions_num_range: Lis
     # image = np.zeros((height, width), dtype=np.float32)
     image = np.full((height, width), 140, dtype=np.float32)
 
-    # num_points = rng.randint(*voronoi_regions_num_range)
-    # region_generator_points = np.column_stack((rng.uniform(0, width, num_points),
-    #                                            rng.uniform(0, height, num_points)))
-    # vor = scipy.spatial.Voronoi(region_generator_points)
-    # regions, vertices = get_finite_voronoi(vor)
+    num_points = rng.randint(*voronoi_regions_num_range)
+    region_generator_points = np.column_stack((rng.uniform(0, width, num_points),
+                                               rng.uniform(0, height, num_points)))
+    vor = scipy.spatial.Voronoi(region_generator_points)
+    regions, vertices = get_finite_voronoi(vor)
 
-    p1, p2 = generate_distant_points(rng, 800, width, height)
-    regions, vertices = [[0, 1]], np.array([p1, p2])
+    # to generate only one long border
+    # p1, p2 = generate_distant_points(rng, 800, width, height)
+    # regions, vertices = [[0, 1]], np.array([p1, p2])
+
     modified_borders = distort_borders(regions, vertices, width, height)
 
     for region in regions:
@@ -113,9 +115,10 @@ def divide_edge(start: Point, end: Point, rng: RandomState, width: int, height: 
     # if it lies partially, we divide only the part of the line which lies in the area
     is_inside, new_start, new_end = cv2.clipLine((0, 0, width, height), start, end)
     if not is_inside:
+        # todo should I clip this?
         return np.array([np.array(start), np.array(end)])
 
-    noisy_points = [np.array(start)]
+    noisy_points = [np.array(new_start)]
 
     line_length = np.linalg.norm(np.array(new_end) - np.array(new_start))
     # todo set a parameter for num of segments aka border jaggedness
@@ -130,7 +133,7 @@ def divide_edge(start: Point, end: Point, rng: RandomState, width: int, height: 
     for i in range(1, len(points) - 1):
         noise = rng.normal(0, noise_level, size=2)
         noisy_points.append(points[i] + noise)
-    noisy_points.append(np.array(end))
+    noisy_points.append(np.array(new_end))
 
     return np.array(noisy_points)
 
