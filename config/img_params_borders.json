@@ -1,9 +1,10 @@
 {
   "img_size": [1024, 1024],
   "precipitate_num_range": [3, 5],
-  "precipitate_color": [25, 25, 25],
+  "precipitate_color_range": [15, 35],
   "precipitate_size_range": [10, 30],
   "precipitate_size_distribution": [4, 3, 2],
+  "precipitate_shading_color_range": [40, 240],
   "voronoi_regions_num_range": [4, 8],
   "voronoi_color_range": [120, 150],
   "voronoi_border_width": 4,

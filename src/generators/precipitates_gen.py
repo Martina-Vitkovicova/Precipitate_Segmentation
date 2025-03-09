@@ -9,13 +9,13 @@ from scipy.interpolate import splprep, splev
 from src.type_definitions import Image, Color, Point, RandomState, Mask, Contour, Coords
 
 
-def add_precipitates(image: Image, seed: int, *, precipitate_color: Color, precipitate_num_range: List[int],
-                     precipitate_size_range: List[int], precipitate_size_distribution: List[int], **kwargs) \
+def add_precipitates(image: Image, seed: int, *, precipitate_color_range: Color, precipitate_num_range: List[int],
+                     precipitate_size_range: List[int], precipitate_size_distribution: List[int],
+                     precipitate_shading_color_range: List[int], **kwargs) \
         -> Tuple[Image, Mask]:
     rng = np.random.RandomState(seed)
     mask = np.zeros(image.shape)
     precip_num = rng.randint(*precipitate_num_range)
-    color = precipitate_color
     mask_color = (255, 255, 255)
 
     for _ in range(precip_num):
@@ -23,10 +23,11 @@ def add_precipitates(image: Image, seed: int, *, precipitate_color: Color, preci
         radius = generate_precip_size(rng, precipitate_size_range, precipitate_size_distribution)
         contour = generate_precipitate_contour(image, radius, rng)
 
+        color = rng.randint(*precipitate_color_range)
         cv2.fillPoly(image, [contour], color)
         cv2.fillPoly(mask, [contour], mask_color)
         cv2.fillPoly(temp_mask, [contour], mask_color)
-        image = add_individual_emboss(temp_mask, image, radius, rng)
+        image = add_individual_emboss(temp_mask, image, radius, rng, precipitate_shading_color_range)
 
     image = add_feather_effect(image, mask)
 
@@ -72,13 +73,14 @@ def generate_shape_coords(num_points: int, radius: int, radius_variation: float,
     return x_coords, y_coords
 
 
-def add_individual_emboss(temp_mask: Mask, image: Image, radius: int, rng: RandomState) -> Image:
+def add_individual_emboss(temp_mask: Mask, image: Image, radius: int, rng: RandomState,
+                          precipitate_shading_color_range: List[int]) -> Image:
     effect_size = compute_emboss_size(radius, rng)
 
-    shading, shading_mask = compute_gradient_shading(temp_mask, effect_size)
+    shading, shading_mask = compute_gradient_shading(temp_mask, effect_size, precipitate_shading_color_range)
 
     blurred_border = cv2.GaussianBlur(shading_mask.astype(float), (effect_size, effect_size), sigmaX=0)
-    shading_strength = rng.randint(80, 200)
+    shading_strength = rng.randint(80, 225)
     blurred_border = adjust_image_value_range(blurred_border, 20, shading_strength)
     alpha = blurred_border.astype(np.float32) / 255.0
 
@@ -88,7 +90,8 @@ def add_individual_emboss(temp_mask: Mask, image: Image, radius: int, rng: Rando
     return image
 
 
-def compute_gradient_shading(temp_mask: Mask, size: int) -> Tuple[Image, Mask]:
+def compute_gradient_shading(temp_mask: Mask, size: int, precipitate_shading_color_range: List[int])\
+        -> Tuple[Image, Mask]:
     # need to make the mask smaller since the gradient is computed around the border
     erosion = int(size // 4)
     temp_mask = cv2.erode(temp_mask, np.ones((erosion, erosion), np.uint8), iterations=1)
@@ -109,7 +112,7 @@ def compute_gradient_shading(temp_mask: Mask, size: int) -> Tuple[Image, Mask]:
 
     ksize = size // 2 | 1
     shading_blurred = cv2.GaussianBlur(only_shading, (ksize, ksize), sigmaX=0)
-    shading_normalized = adjust_image_value_range(shading_blurred, 40, 240)
+    shading_normalized = adjust_image_value_range(shading_blurred, *precipitate_shading_color_range)
 
     return shading_normalized, shading_mask
 
