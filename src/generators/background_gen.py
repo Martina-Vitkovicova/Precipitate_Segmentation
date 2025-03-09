@@ -249,7 +249,7 @@ def change_border_width(image: Image, y_coords: Coords, x_coords: Coords, rng: R
 def smooth_border_mask(border_mask: BorderMask):
     # plt.imshow(border_mask, cmap="gray")
     # plt.show()
-    border_mask = ndimage.gaussian_filter(border_mask, sigma=3)
+    border_mask = ndimage.gaussian_filter(border_mask, sigma=2)
     # plt.imshow(border_mask, cmap="gray")
     # plt.show()
     border_mask = border_mask > 0.4
