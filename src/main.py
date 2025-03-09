@@ -1,4 +1,6 @@
 import numpy as np
+import os
+from tqdm.auto import tqdm
 
 from generators.images_gen import generate_image, save_images
 from image_visualization import show_image_mask
@@ -9,15 +11,19 @@ IMG_SAVE_PATH = "../../Data/gen" + str(GENERATION)
 
 
 def generate(num=1, gen=14, img_params_path="../config/img_params.json", img_save_path="../../Data/gen",
-             show=True, save=True, random_seeds=False, seeds_path="seeds.txt"):
-    img_save_path = f"{img_save_path}{gen}"
+             show=True, save=True, random_seeds=False, seeds_path="./seeds.txt", start_seed=0):
+    img_save_path = os.path.join(img_save_path, f"gen{gen}")
 
     with open(seeds_path, "r") as file:
         if not random_seeds and num > sum(1 for _ in file):
             return print("Not enough seeds in seeds.txt")
         file.seek(0)
+        
+        if not random_seeds and start_seed > 0:
+            for _ in range(start_seed):
+                file.readline()
 
-        for _ in range(num):
+        for _ in tqdm(range(num), desc="Generating Images", unit="img"):
             if random_seeds:
                 root_seed = np.random.randint(0, 10 ** 5)
             else:
@@ -32,4 +38,5 @@ def generate(num=1, gen=14, img_params_path="../config/img_params.json", img_sav
 
 
 if __name__ == "__main__":
-    generate(gen=GENERATION, img_params_path=IMG_PARAMS_PATH, img_save_path=IMG_SAVE_PATH, save=False, random_seeds=True, num=10)
+    generate()
+

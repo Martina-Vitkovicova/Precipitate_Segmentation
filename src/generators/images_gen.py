@@ -9,7 +9,10 @@ from perlin_numpy import generate_perlin_noise_2d
 from generators.background_gen import voronoi_bg
 from generators.precipitates_gen import add_precipitates
 from type_definitions import Image, RandomState
+<<<<<<< HEAD
 from datetime import datetime
+=======
+>>>>>>> 2010325 (conflict resolution)
 
 def generate_image(root_seed, img_params):
     rng = np.random.RandomState(root_seed)
