@@ -267,7 +267,10 @@ def slice_lists(row: Coords, col: Coords, seq_len: int, rng: RandomState) -> Tup
     i = 0
 
     while i < total_length:
-        sequence_length = rng.randint(10, seq_len)
+        if seq_len <= 10:
+            sequence_length = seq_len
+        else:
+            sequence_length = rng.randint(10, seq_len)
         end_index = min(i + sequence_length, total_length)
 
         if rng.choice([True, False]):

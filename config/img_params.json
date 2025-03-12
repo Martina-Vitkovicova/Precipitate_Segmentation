@@ -1,10 +1,17 @@
 {
   "img_size": [1024, 1024],
-  "precipitate_num_range": [1, 2],
-  "precipitate_color": [25, 25, 25],
-  "precipitate_size_range": [30, 35],
-  "precipitate_size_distribution": [4, 3, 2],
-  "voronoi_regions_num_range": [14, 15],
-  "voronoi_color_range": [120, 150],
-  "voronoi_border_width": 4
+  "precipitate_num_range": [100, 150],
+  "precipitate_color_range": [10, 20],
+  "precipitate_size_range": [1, 48],
+  "precipitate_size_distribution": [2200, 30, 25, 15, 10, 6, 3, 1],
+  "precipitate_shading_color_range": [40, 240],
+  "voronoi_regions_num_range": [40, 60],
+  "voronoi_color_range": [120, 140],
+  "voronoi_border_width": 3,
+  "voronoi_border_jaggedness": 0.4,
+  "voronoi_border_noise": 0.5,
+  "voronoi_border_3d": "True",
+  "voronoi_light_direction": [-1, -2, 4],
+  "voronoi_shading_color_range": [50, 190],
+  "voronoi_perlin_noise": [10, 25]
 }
