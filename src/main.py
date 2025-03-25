@@ -1,7 +1,7 @@
 import numpy as np
 
 from generators.images_gen import generate_image, save_images
-from src.image_visualization import show_image_mask
+from image_visualization import show_image_mask
 
 GENERATION = 14
 IMG_PARAMS_PATH = "../config/img_params_borders.json"

@@ -6,7 +6,7 @@ import numpy as np
 from numpy.typing import NDArray
 from scipy.interpolate import splprep, splev
 
-from src.type_definitions import Image, Color, Point, RandomState, Mask, Contour, Coords
+from type_definitions import Image, Color, Point, RandomState, Mask, Contour, Coords
 
 
 def add_precipitates(image: Image, seed: int, *, precipitate_color_range: Color, precipitate_num_range: List[int],

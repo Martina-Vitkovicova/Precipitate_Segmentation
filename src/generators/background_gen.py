@@ -10,8 +10,8 @@ import skimage.draw as skdraw
 
 from perlin_numpy import generate_perlin_noise_2d
 
-from src.generators.finite_voronoi_gen import get_finite_voronoi
-from src.type_definitions import (Image, IndexedRegion, Vertices, Edge, Point, RandomState, Coords, BorderMask,
+from generators.finite_voronoi_gen import get_finite_voronoi
+from type_definitions import (Image, IndexedRegion, Vertices, Edge, Point, RandomState, Coords, BorderMask,
                                   GradientImage)
 
 

@@ -6,23 +6,20 @@ import numpy as np
 from matplotlib import pyplot as plt
 from perlin_numpy import generate_perlin_noise_2d
 
-from src.generators.background_gen import voronoi_bg
-from src.generators.precipitates_gen import add_precipitates
-from src.type_definitions import Image, RandomState
+from generators.background_gen import voronoi_bg
+from generators.precipitates_gen import add_precipitates
+from type_definitions import Image, RandomState
+from datetime import datetime
 
-
-def generate_image(root_seed, img_params_path):
+def generate_image(root_seed, img_params):
     rng = np.random.RandomState(root_seed)
     vor_seed = rng.randint(0, 10 ** 5)
     precip_seed = rng.randint(0, 10 ** 5)
 
-    with open(img_params_path, "r") as file:
-        img_params = json.load(file)
-
     background = voronoi_bg(vor_seed, **img_params)
     image, mask = add_precipitates(background, precip_seed, **img_params)
-    image = add_perlin_noise(image, rng, alpha=0.05, divisor=2)
 
+    image = add_perlin_noise(image, rng, alpha=0.05, divisor=2)
     return image, mask
 
 

@@ -2,8 +2,7 @@ from typing import Tuple, List, Optional, Dict
 
 import numpy as np
 from scipy.spatial import Voronoi
-
-from src.type_definitions import IndexedRegion, Vertices, AllRidges, FloatPoint, Edge
+from type_definitions import IndexedRegion, Vertices, AllRidges, FloatPoint, Edge
 
 
 def _build_all_ridges(vor: Voronoi) -> AllRidges:
@@ -99,7 +98,7 @@ def get_finite_voronoi(vor: Voronoi, radius: Optional[float] = None) -> Tuple[Li
         raise ValueError("Requires 2D input")
 
     if radius is None:
-        radius = 1000
+        radius = 2
 
     added_points = {}
     new_regions = []
