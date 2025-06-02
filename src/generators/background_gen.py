@@ -50,6 +50,7 @@ def voronoi_bg(seed: int, *, img_size: List[int], voronoi_regions_num_range: Lis
     Numpy 2D ndarray image.
     """
     rng = np.random.RandomState(seed)
+    noise_rng = np.random.RandomState(seed + 1)
     width, height = img_size
     # image = np.zeros((height, width), dtype=np.float32)
     image = np.full((height, width), 140, dtype=np.float32)
@@ -76,7 +77,7 @@ def voronoi_bg(seed: int, *, img_size: List[int], voronoi_regions_num_range: Lis
         # plt.show()
         image = improve_borders(image, y_coords, x_coords, voronoi_border_width, rng, color, voronoi_border_3d,
                                 voronoi_light_direction, voronoi_shading_color_range)
-        image = add_perlin_noise(image, rng, row, col, voronoi_perlin_noise)
+        image = add_perlin_noise(image, noise_rng, row, col, voronoi_perlin_noise)
 
     return image
 
@@ -137,7 +138,10 @@ def divide_edge(start: Point, end: Point, rng: RandomState, width: int, height: 
     # todo set a parameter for num of segments aka border jaggedness
     base_segments = max(2, int(np.sqrt(line_length) * voronoi_border_jaggedness))
     # changes in x, y coords to make the border jagged
-    noise_level = max(3, min(15, int(np.sqrt(line_length) * voronoi_border_noise) + rng.randint(-2, 2)))
+    if voronoi_border_noise > 0:
+        noise_level = max(3, min(15, int(np.sqrt(line_length) * voronoi_border_noise) + rng.randint(-2, 2)))
+    else:
+        noise_level = 0
     # to how many segments will the line be divided
     num_segments = max(3, min(15, base_segments + rng.randint(-base_segments // 2, base_segments // 2)))
     # no need to add randomness to the spacing because noise creates the randomness
@@ -176,9 +180,9 @@ def improve_borders(image: Image, y_coords: Coords, x_coords: Coords, width: int
 
     border_mask = change_border_width(image, y_coords, x_coords, rng, width)
 
-    if not voronoi_border_3d:
+    if voronoi_border_3d == "False":
         new_image = image.copy()
-        new_image[border_mask == 1] = color + rng.randint(-15, 15)
+        new_image[border_mask == 1] = color + rng.randint(-15, -14)
     else:
         grad_shading = compute_3d_border_effect(border_mask, rng, voronoi_light_direction, voronoi_shading_color_range)
         border_mask = skimage.morphology.dilation(border_mask, skimage.morphology.disk(width))
@@ -303,7 +307,7 @@ def blend_borders_w_bg(border_mask: BorderMask, image: Image, grad_shading: Grad
 
 def add_perlin_noise(image: Image, rng: RandomState, row: Coords, col: Coords, voronoi_perlin_noise: List[int])\
         -> Image:
-    """ Adds perlin noise the whole background. """
+    """ Adds perlin noise the individual cells. """
 
     new_image = image.copy()
     alpha = rng.randint(*voronoi_perlin_noise) / 100
