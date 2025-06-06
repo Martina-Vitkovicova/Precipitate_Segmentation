@@ -16,9 +16,9 @@ from src.type_definitions import (Image, IndexedRegion, Vertices, Edge, Point, R
 
 
 def voronoi_bg(seed: int, *, img_size: List[int], voronoi_regions_num_range: List[int], voronoi_color_range: List[int],
-               voronoi_border_width: int, voronoi_border_jaggedness: float, voronoi_border_noise: float,
-               voronoi_border_3d: bool, voronoi_light_direction: List[int], voronoi_shading_color_range: List[int],
-               voronoi_perlin_noise: List[int], **kwargs) -> Image:
+               voronoi_border_width: int, voronoi_change_border_width: bool, voronoi_border_jaggedness: float,
+               voronoi_border_noise: float, voronoi_border_3d: bool, voronoi_light_direction: List[int],
+               voronoi_shading_color_range: List[int], voronoi_perlin_noise: List[int], **kwargs) -> Image:
     """
     Creates a background matrix image consisting of regions (grains) with borders.
 
@@ -36,6 +36,7 @@ def voronoi_bg(seed: int, *, img_size: List[int], voronoi_regions_num_range: Lis
     voronoi_border_width:
         int number for base width of the region borders. The borders are processed and widened, so this number is the
         minimum border width in the image.
+    voronoi_change_border_width:
     voronoi_border_jaggedness:
     voronoi_border_noise:
     voronoi_border_3d:
@@ -51,6 +52,7 @@ def voronoi_bg(seed: int, *, img_size: List[int], voronoi_regions_num_range: Lis
     """
     rng = np.random.RandomState(seed)
     noise_rng = np.random.RandomState(seed + 1)
+    borders_rng = np.random.RandomState(seed + 2)
     width, height = img_size
     # image = np.zeros((height, width), dtype=np.float32)
     image = np.full((height, width), 140, dtype=np.float32)
@@ -75,9 +77,9 @@ def voronoi_bg(seed: int, *, img_size: List[int], voronoi_regions_num_range: Lis
         image[row, col] = color
         # plt.imshow(image, cmap="gray")
         # plt.show()
-        image = improve_borders(image, y_coords, x_coords, voronoi_border_width, rng, color, voronoi_border_3d,
-                                voronoi_light_direction, voronoi_shading_color_range)
         image = add_perlin_noise(image, noise_rng, row, col, voronoi_perlin_noise)
+        image = improve_borders(image, y_coords, x_coords, voronoi_border_width, voronoi_change_border_width, borders_rng,
+                                color, voronoi_border_3d, voronoi_light_direction, voronoi_shading_color_range)
 
     return image
 
@@ -173,12 +175,12 @@ def get_distorted_region_coords(modified_borders: Dict[Edge, Vertices], region: 
     return np.array(y_coords).astype(int), np.array(x_coords).astype(int)
 
 
-def improve_borders(image: Image, y_coords: Coords, x_coords: Coords, width: int, rng: RandomState, color: int,
-                    voronoi_border_3d: bool, voronoi_light_direction: List[int],
+def improve_borders(image: Image, y_coords: Coords, x_coords: Coords, width: int, change_width: bool,
+                    rng: RandomState, color: int, voronoi_border_3d: bool, voronoi_light_direction: List[int],
                     voronoi_shading_color_range: List[int]) -> Image:
     """ Changes the border appearance - width and color. """
 
-    border_mask = change_border_width(image, y_coords, x_coords, rng, width)
+    border_mask = change_border_width(image, y_coords, x_coords, rng, width, change_width)
 
     if voronoi_border_3d == "False":
         new_image = image.copy()
@@ -222,23 +224,27 @@ def compute_3d_border_effect(border_mask: BorderMask, rng: RandomState, voronoi_
     return gradient_shading
 
 
-def change_border_width(image: Image, y_coords: Coords, x_coords: Coords, rng: RandomState, width: int) -> BorderMask:
-    """ Gradually thickens and then narrows region borders simulating natural flow. """
+def change_border_width(image: Image, y_coords: Coords, x_coords: Coords, rng: RandomState, width: int,
+                        change_width: bool) -> BorderMask:
+    """ Uniformly thickens the region borders or gradually thickens and then narrows them simulating natural flow. """
 
     border_image, border_mask = np.zeros_like(image), np.zeros_like(image)
     perim_row, perim_col = skdraw.polygon_perimeter(y_coords, x_coords, shape=image.shape)
     border_image[perim_row, perim_col] = 1
+
+    if change_width == "False":
+        disk = skimage.morphology.disk(width)
+        return skimage.morphology.dilation(border_image, disk)
+
     temp_width = int(width * 0.5)
     i = 0
 
-    while temp_width < width:
+    while temp_width <= width:
         # triangle = np.tri(temp_width, temp_width, dtype=np.uint8)
         disk = skimage.morphology.disk(temp_width)
         n_mask = skimage.morphology.dilation(border_image, disk)
-
-        px_len = len(perim_row) // rng.randint(6, 10)
-        # seq_length = rng.randint(30 // (i + 1), 60 // (i + 1))
-        perim_row, perim_col, exclude_row, exclude_col = slice_lists(perim_row, perim_col, px_len, rng)
+        # TODO fix the thickening
+        perim_row, perim_col, exclude_row, exclude_col = slice_lists(perim_row, perim_col, len(perim_row), rng)
         if len(exclude_col) > 0 and len(exclude_row) > 0:
             border_image[exclude_row, exclude_col] = 0
             border_mask = np.maximum(n_mask, border_mask)
@@ -271,23 +277,25 @@ def slice_lists(row: Coords, col: Coords, seq_len: int, rng: RandomState) -> Tup
     i = 0
 
     while i < total_length:
-        if seq_len <= 10:
+        if seq_len <= 20:
             sequence_length = seq_len
         else:
-            sequence_length = rng.randint(10, seq_len)
+            sequence_length = rng.randint(20, 20 + seq_len // 4)
         end_index = min(i + sequence_length, total_length)
 
-        if rng.choice([True, False]):
+        if rng.choice([1, 2]) == 2:
             # Include the entire segment.
             new_row.extend(row[i:end_index])
             new_col.extend(col[i:end_index])
         else:
             # Exclude only half the segment, include the other half.
-            half = (end_index - i) // 2
-            removed_row.extend(row[i:i + half])
-            removed_col.extend(col[i:i + half])
-            new_row.extend(row[i + half:end_index])
-            new_col.extend(col[i + half:end_index])
+            # half = (end_index - i) // 2
+            # removed_row.extend(row[i:i + half])
+            # removed_col.extend(col[i:i + half])
+            # new_row.extend(row[i + half:end_index])
+            # new_col.extend(col[i + half:end_index])
+            removed_row.extend(row[i:end_index])
+            removed_col.extend(col[i:end_index])
         i = end_index
 
     return np.array(new_row), np.array(new_col), np.array(removed_row), np.array(removed_col)
@@ -308,7 +316,6 @@ def blend_borders_w_bg(border_mask: BorderMask, image: Image, grad_shading: Grad
 def add_perlin_noise(image: Image, rng: RandomState, row: Coords, col: Coords, voronoi_perlin_noise: List[int])\
         -> Image:
     """ Adds perlin noise the individual cells. """
-
     new_image = image.copy()
     alpha = rng.randint(*voronoi_perlin_noise) / 100
     divisor = rng.choice((2, 4))
