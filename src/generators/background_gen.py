@@ -1,4 +1,5 @@
 import hashlib
+import random
 from typing import List, Tuple, Dict
 import cv2
 import matplotlib.pyplot as plt
@@ -19,7 +20,8 @@ from src.type_definitions import (Image, IndexedRegion, Vertices, Edge, Point, R
 def voronoi_bg(seed: int, *, img_size: List[int], voronoi_regions_num_range: List[int], voronoi_color_range: List[int],
                voronoi_border_width: int, voronoi_change_border_width: bool, voronoi_border_jaggedness: float,
                voronoi_border_noise: float, voronoi_border_3d: bool, voronoi_light_direction: List[int],
-               voronoi_shading_color_range: List[int], voronoi_perlin_noise: List[int], **kwargs) -> Image:
+               voronoi_shading_color_range: List[int], voronoi_perlin_noise: List[int],
+               voronoi_perlin_noise_scale: List[int], **kwargs) -> Image:
     """
     Creates a background matrix image consisting of regions (grains) with borders.
 
@@ -44,6 +46,7 @@ def voronoi_bg(seed: int, *, img_size: List[int], voronoi_regions_num_range: Lis
     voronoi_light_direction:
     voronoi_shading_color_range:
     voronoi_perlin_noise:
+    voronoi_perlin_noise_scale:
     kwargs:
         other parameters not used for the background generation.
 
@@ -72,7 +75,7 @@ def voronoi_bg(seed: int, *, img_size: List[int], voronoi_regions_num_range: Lis
         row, col = skdraw.polygon(y_coords, x_coords, shape=image.shape)
         color = rng.randint(*voronoi_color_range)
         image[row, col] = color
-        image = add_perlin_noise(image, noise_rng, row, col, voronoi_perlin_noise)
+        image = add_perlin_noise(image, noise_rng, row, col, voronoi_perlin_noise, voronoi_perlin_noise_scale)
 
         perim_row, perim_col = skdraw.polygon_perimeter(y_coords, x_coords, shape=image.shape)
         border_mask[perim_row, perim_col] = 1
@@ -206,7 +209,7 @@ def change_border_width(border_mask, rng: RandomState, width: int, change_width:
     for contour in contours:
         contour = contour.squeeze()
         length = contour.shape[0]
-        num_control_points = int(np.sqrt(length))
+        num_control_points = int(np.sqrt(length)) // 2
 
         xs = contour[:, 0].astype(int)
         ys = contour[:, 1].astype(int)
@@ -215,13 +218,13 @@ def change_border_width(border_mask, rng: RandomState, width: int, change_width:
         # plt.imshow(width_map)
         # plt.show()
 
-    dt, (idy, idx) = distance_transform_edt(1 - border_mask, return_indices=True)
+    border_distance, (closest_border_y, closest_border_x) = distance_transform_edt(1 - border_mask, return_indices=True)
     # plt.imshow(dt)
     # plt.show()
 
-    nearest_r = (width_map[idy, idx] * 0.5)
-    thickened_borders = (dt <= nearest_r).astype(np.uint8) * 255
-    thickened_borders = ndimage.gaussian_filter(thickened_borders, sigma=1)
+    half_distance_band = (width_map[closest_border_y, closest_border_x] * 0.5)
+    thickened_borders = (border_distance <= half_distance_band).astype(np.uint8) * 255
+    thickened_borders = ndimage.gaussian_filter(thickened_borders, sigma=1, truncate=1)
 
     return thickened_borders
 
@@ -292,12 +295,12 @@ def blend_borders_w_bg(border_mask: BorderMask, image: Image, grad_shading: Grad
     return new_image
 
 
-def add_perlin_noise(image: Image, rng: RandomState, row: Coords, col: Coords, voronoi_perlin_noise: List[int]) \
-        -> Image:
+def add_perlin_noise(image: Image, rng: RandomState, row: Coords, col: Coords, voronoi_perlin_noise: List[int],
+                     voronoi_perlin_noise_scale) -> Image:
     """ Adds perlin noise the individual cells. """
     new_image = image.copy()
     alpha = rng.randint(*voronoi_perlin_noise) / 100
-    divisor = rng.choice((2, 4))
+    divisor = rng.choice(voronoi_perlin_noise_scale)
     res = (image.shape[0] // divisor, image.shape[1] // divisor)
 
     height, width = image.shape
