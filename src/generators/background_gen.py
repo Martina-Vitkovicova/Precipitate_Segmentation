@@ -21,7 +21,8 @@ def voronoi_bg(seed: int, *, img_size: List[int], voronoi_regions_num_range: Lis
                voronoi_border_width: int, voronoi_change_border_width: bool, voronoi_border_jaggedness: float,
                voronoi_border_noise: float, voronoi_border_3d: bool, voronoi_light_direction: List[int],
                voronoi_shading_color_range: List[int], voronoi_perlin_noise: List[int],
-               voronoi_perlin_noise_scale: List[int], voronoi_gaussian_noise: List[int], **kwargs) -> Image:
+               voronoi_perlin_noise_scale: List[int], voronoi_gaussian_noise: List[int], voronoi_porous_texture: bool,
+    **kwargs) -> Image:
     """
     Creates a background matrix image consisting of regions (grains) with borders.
 
@@ -48,6 +49,7 @@ def voronoi_bg(seed: int, *, img_size: List[int], voronoi_regions_num_range: Lis
     voronoi_perlin_noise:
     voronoi_perlin_noise_scale:
     voronoi_gaussian_noise:
+    voronoi_porous_texture:
     kwargs:
         other parameters not used for the background generation.
 
@@ -59,6 +61,7 @@ def voronoi_bg(seed: int, *, img_size: List[int], voronoi_regions_num_range: Lis
     perlin_rng = np.random.RandomState(seed + 1)
     borders_rng = np.random.RandomState(seed + 2)
     gauss_rng = np.random.RandomState(seed + 3)
+    texture_rng = np.random.RandomState(seed + 4)
     width, height = img_size
     # image = np.zeros((height, width), dtype=np.float32)
     image = np.full((height, width), 140, dtype=np.float32)
@@ -78,7 +81,8 @@ def voronoi_bg(seed: int, *, img_size: List[int], voronoi_regions_num_range: Lis
         color = rng.randint(*voronoi_color_range)
         image[row, col] = color
         image = add_perlin_noise(image, perlin_rng, row, col, voronoi_perlin_noise, voronoi_perlin_noise_scale)
-        image = add_gaussian_noise(image, gauss_rng, row, col, voronoi_gaussian_noise)
+        if gauss_rng.randint(1, 5) > 3:
+            image = add_gaussian_noise(image, gauss_rng, row, col, voronoi_gaussian_noise)
 
         perim_row, perim_col = skdraw.polygon_perimeter(y_coords, x_coords, shape=image.shape)
         border_mask[perim_row, perim_col] = 1
@@ -86,6 +90,9 @@ def voronoi_bg(seed: int, *, img_size: List[int], voronoi_regions_num_range: Lis
     image = modify_borders(image, border_mask, voronoi_border_width, voronoi_change_border_width, borders_rng,
                            130, voronoi_border_3d, voronoi_light_direction,
                            voronoi_shading_color_range)
+    if voronoi_porous_texture:
+        image = add_porous_texture(image, texture_rng, dark=True, density=0.2, blur_size=0.7, intensity=12)
+        image = add_porous_texture(image, texture_rng, dark=False, density=0.2, blur_size=0.6, intensity=7)
 
     return image
 
@@ -307,8 +314,8 @@ def add_perlin_noise(image: Image, rng: RandomState, row: Coords, col: Coords, v
     res = (image.shape[0] // divisor, image.shape[1] // divisor)
 
     height, width = image.shape
-    noise = generate_perlin_noise_2d((width, height), res, rng=rng)
-    # * 127.5 so the noise mean is 0
+    noise = generate_perlin_noise_2d((width, height), res, rng=rng)  # range ~ [-1, 1]
+    noise = noise - noise.mean()
     noise_amplitude = alpha * 127.5
     new_image[row, col] = image[row, col] + noise[row, col] * noise_amplitude
 
@@ -317,12 +324,40 @@ def add_perlin_noise(image: Image, rng: RandomState, row: Coords, col: Coords, v
 
 def add_gaussian_noise(image: Image, rng: RandomState, row: Coords, col: Coords, voronoi_gaussian_noise: List[int]) -> Image:
     new_image = image.copy()
-
     noise = rng.normal(0, 1, (1025, 1025))
     alpha = rng.randint(*voronoi_gaussian_noise) * 0.03
+    noise = noise - noise.mean()
     noise_amplitude = alpha * 127.5
     new_image[row, col] = image[row, col] + noise[row, col] * noise_amplitude
     return new_image
+
+
+def add_porous_texture(image: Image, rng: RandomState, dark: bool, density: float, blur_size: float, intensity: float):
+    h, w = image.shape
+    # generate impulses and their strengths
+    texture = np.zeros((h, w), dtype=np.float32)
+    num = rng.poisson(density * h * w)
+    impulse_strengths = rng.lognormal(mean=0.0, sigma=0.7, size=num).astype(np.float32)
+
+    # add the impulses to the texture
+    y_impulse_coords = rng.randint(0, h, size=num)
+    x_impulse_coords = rng.randint(0, w, size=num)
+    texture[y_impulse_coords, x_impulse_coords] = impulse_strengths
+
+    # blur to make smooth pits
+    texture = ndimage.gaussian_filter(texture, blur_size)
+
+    # adjust intensity of impulses
+    texture = texture * intensity
+
+    if dark:
+        texture = -texture
+    texture -= texture.mean()  # center around 0
+
+    tex = image + texture
+    # tex = (np.clip(tex, 0, 1) * 255).astype(np.uint8)
+
+    return tex
 
 
 def get_height_map(border_mask: BorderMask, sigma: float) -> Image:

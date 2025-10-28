@@ -22,6 +22,7 @@ def generate_image(root_seed, img_params_path):
     background = voronoi_bg(vor_seed, **img_params)
     image, mask = add_precipitates(background, precip_seed, **img_params)
     image = add_perlin_noise(image, rng, alpha=0.05, divisor=2)
+    image = add_gaussian_noise(image, rng)
 
     return image, mask
 
@@ -60,4 +61,13 @@ def add_perlin_noise(image: Image, rng: RandomState, alpha: float, divisor: int)
     noise -= noise.mean()
     new_image = image + noise * alpha * 127.5
 
+    return new_image
+
+
+def add_gaussian_noise(image: Image, rng: RandomState):
+    noise = rng.normal(0, 1, (1025, 1025))
+    noise = noise[:-1, :-1]
+    noise -= noise.mean()
+    alpha = rng.randint(1, 3) * 0.01
+    new_image = image + noise * alpha * 127.5
     return new_image
