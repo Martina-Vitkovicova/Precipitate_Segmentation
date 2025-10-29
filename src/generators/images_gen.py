@@ -15,14 +15,17 @@ def generate_image(root_seed, img_params_path):
     rng = np.random.RandomState(root_seed)
     vor_seed = rng.randint(0, 10 ** 5)
     precip_seed = rng.randint(0, 10 ** 5)
+    illumination_rng = np.random.RandomState(rng.randint(0, 10 ** 5))
 
     with open(img_params_path, "r") as file:
         img_params = json.load(file)
 
     background = voronoi_bg(vor_seed, **img_params)
     image, mask = add_precipitates(background, precip_seed, **img_params)
-    image = add_perlin_noise(image, rng, alpha=0.05, divisor=2)
+    # image = add_perlin_noise(image, rng, alpha=0.05, divisor=2)
     image = add_gaussian_noise(image, rng)
+    image = add_illumination_gradient(image, illumination_rng, img_params["img_illumination_gradient_strength_range"],
+                                      img_params["img_illumination_gradient_angle_range"])
 
     return image, mask
 
@@ -71,3 +74,22 @@ def add_gaussian_noise(image: Image, rng: RandomState):
     alpha = rng.randint(1, 3) * 0.01
     new_image = image + noise * alpha * 127.5
     return new_image
+
+
+def add_illumination_gradient(image, rng, strength_range, angle_range):
+    h, w = image.shape
+    y = np.linspace(-0.5, 0.5, h)
+    x = np.linspace(-0.5, 0.5, w)
+    X, Y = np.meshgrid(x, y)
+
+    angle = np.deg2rad(rng.uniform(*angle_range))
+    dx, dy = np.cos(angle), np.sin(angle)
+
+    # compute directional gradient in chosen orientation
+    grad = dx * X + dy * Y
+    grad = (grad - grad.min()) / (grad.max() - grad.min())  # normalize to 0–1
+
+    strength = rng.uniform(*strength_range)
+    mask = 1.0 - strength + grad * strength * 2.0
+
+    return image * mask
