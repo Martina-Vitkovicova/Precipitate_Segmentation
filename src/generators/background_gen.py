@@ -22,7 +22,7 @@ def voronoi_bg(seed: int, *, img_size: List[int], voronoi_regions_num_range: Lis
                voronoi_border_noise: float, voronoi_border_3d: bool, voronoi_light_direction: List[int],
                voronoi_shading_color_range: List[int], voronoi_perlin_noise: List[int],
                voronoi_perlin_noise_scale: List[int], voronoi_gaussian_noise: List[int], voronoi_porous_texture: bool,
-    **kwargs) -> Image:
+               **kwargs) -> Image:
     """
     Creates a background matrix image consisting of regions (grains) with borders.
 
@@ -81,8 +81,8 @@ def voronoi_bg(seed: int, *, img_size: List[int], voronoi_regions_num_range: Lis
         color = rng.randint(*voronoi_color_range)
         image[row, col] = color
         image = add_perlin_noise(image, perlin_rng, row, col, voronoi_perlin_noise, voronoi_perlin_noise_scale)
-        if gauss_rng.randint(1, 5) > 3:
-            image = add_gaussian_noise(image, gauss_rng, row, col, voronoi_gaussian_noise)
+        # if gauss_rng.randint(1, 5) > 3:
+        #     image = add_gaussian_noise(image, gauss_rng, row, col, voronoi_gaussian_noise)
 
         perim_row, perim_col = skdraw.polygon_perimeter(y_coords, x_coords, shape=image.shape)
         border_mask[perim_row, perim_col] = 1
@@ -322,7 +322,8 @@ def add_perlin_noise(image: Image, rng: RandomState, row: Coords, col: Coords, v
     return new_image
 
 
-def add_gaussian_noise(image: Image, rng: RandomState, row: Coords, col: Coords, voronoi_gaussian_noise: List[int]) -> Image:
+def add_gaussian_noise(image: Image, rng: RandomState, row: Coords, col: Coords,
+                       voronoi_gaussian_noise: List[int]) -> Image:
     new_image = image.copy()
     noise = rng.normal(0, 1, (1025, 1025))
     alpha = rng.randint(*voronoi_gaussian_noise) * 0.03

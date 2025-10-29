@@ -12,6 +12,6 @@
   "voronoi_border_noise": 0.5,
   "voronoi_border_3d": "True",
   "voronoi_light_direction": [-1, -2, 4],
-  "voronoi_shading_color_range": [60, 180],
+  "voronoi_shading_color_range": [60, 190],
   "voronoi_perlin_noise": [5, 15]
 }
