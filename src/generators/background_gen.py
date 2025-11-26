@@ -18,13 +18,14 @@ from src.type_definitions import (Image, IndexedRegion, Vertices, Edge, Point, R
 
 
 def voronoi_bg(seed: int, *, img_size: List[int], voronoi_regions_num_range: List[int], voronoi_color_range: List[int],
-               voronoi_border_width: int, voronoi_change_border_width: bool, voronoi_border_jaggedness: float,
-               voronoi_border_noise: float, voronoi_border_3d: bool, voronoi_light_direction: List[int],
+               voronoi_border_width: int, voronoi_change_border_width: str, voronoi_border_jaggedness: float,
+               voronoi_border_noise: float, voronoi_border_3d: str, light_direction: List[int],
                voronoi_shading_color_range: List[int], voronoi_perlin_noise_alpha_range: List[int],
                voronoi_perlin_noise_scale_range: List[int], voronoi_gaussian_noise_alpha_range: List[int],
-               voronoi_porous_texture: bool, voronoi_porous_texture_density_range: List[float],
+               voronoi_porous_texture: str, voronoi_porous_texture_density_range: List[float],
                voronoi_porous_texture_blur_range: List[float], voronoi_porous_texture_intensity_range: List[float],
-               voronoi_porous_texture_size_range: List[float], **kwargs) -> Image:
+               voronoi_porous_texture_size_range: List[float], voronoi_corner_blur: str,
+               voronoi_corner_blur_radius_range: List[int], voronoi_corner_blur_intensity_range: List[int], **kwargs) -> Image:
     """
     Creates a background matrix image consisting of regions (grains) with borders.
 
@@ -46,11 +47,8 @@ def voronoi_bg(seed: int, *, img_size: List[int], voronoi_regions_num_range: Lis
     voronoi_border_jaggedness:
     voronoi_border_noise:
     voronoi_border_3d:
-    voronoi_light_direction:
+    light_direction:
     voronoi_shading_color_range:
-    voronoi_perlin_noise:
-    voronoi_perlin_noise_scale:
-    voronoi_gaussian_noise:
     voronoi_porous_texture:
     kwargs:
         other parameters not used for the background generation.
@@ -64,6 +62,7 @@ def voronoi_bg(seed: int, *, img_size: List[int], voronoi_regions_num_range: Lis
     borders_rng = np.random.RandomState(seed + 2)
     gauss_rng = np.random.RandomState(seed + 3)
     texture_rng = np.random.RandomState(seed + 4)
+    blur_rng = np.random.RandomState(seed + 5)
     width, height = img_size
     # image = np.zeros((height, width), dtype=np.float32)
     image = np.full((height, width), 140, dtype=np.float32)
@@ -85,21 +84,23 @@ def voronoi_bg(seed: int, *, img_size: List[int], voronoi_regions_num_range: Lis
         image = add_perlin_noise(image, perlin_rng, row, col, voronoi_perlin_noise_alpha_range,
                                  voronoi_perlin_noise_scale_range)
         # if gauss_rng.randint(1, 5) > 3:
-        #     image = add_gaussian_noise(image, gauss_rng, row, col, voronoi_gaussian_noise)
+        #     image = add_gaussian_noise(image, gauss_rng, row, col, voronoi_gaussian_noise_alpha_range)
 
         perim_row, perim_col = skdraw.polygon_perimeter(y_coords, x_coords, shape=image.shape)
         border_mask[perim_row, perim_col] = 1
 
     image = modify_borders(image, border_mask, voronoi_border_width, voronoi_change_border_width, borders_rng,
-                           130, voronoi_border_3d, voronoi_light_direction,
-                           voronoi_shading_color_range)
-    if voronoi_porous_texture:
+                           130, voronoi_border_3d, light_direction, voronoi_shading_color_range)
+
+    if voronoi_corner_blur == "True":
+        image = add_corner_blur(image, blur_rng, voronoi_corner_blur_radius_range, voronoi_corner_blur_intensity_range)
+
+    if voronoi_porous_texture == "True":
         image = add_porous_texture(image, texture_rng, True, voronoi_porous_texture_density_range,
                                    voronoi_porous_texture_blur_range, voronoi_porous_texture_intensity_range, voronoi_porous_texture_size_range)
         image = add_porous_texture(image, texture_rng, False, list(np.array(voronoi_porous_texture_density_range)*0.7),
                                    voronoi_porous_texture_blur_range, list(np.array(voronoi_porous_texture_intensity_range)*0.7),
                                    list(np.array(voronoi_porous_texture_size_range)*0.7))
-
     return image
 
 
@@ -195,7 +196,7 @@ def get_distorted_region_coords(modified_borders: Dict[Edge, Vertices], region: 
 
 
 def modify_borders(image: Image, border_mask: BorderMask, width: int, change_width: str,
-                   rng: RandomState, color: int, voronoi_border_3d: bool, voronoi_light_direction: List[int],
+                   rng: RandomState, color: int, voronoi_border_3d: str, light_direction: List[int],
                    voronoi_shading_color_range: List[int]) -> Image:
     """ Changes the border appearance - width and color. """
 
@@ -205,7 +206,7 @@ def modify_borders(image: Image, border_mask: BorderMask, width: int, change_wid
         new_image = image.copy()
         new_image[border_mask > 0] = color + rng.randint(-15, -14)
     else:
-        grad_shading = compute_3d_border_effect(border_mask, rng, voronoi_light_direction, voronoi_shading_color_range)
+        grad_shading = compute_3d_border_effect(border_mask, rng, light_direction, voronoi_shading_color_range)
         border_mask = skimage.morphology.dilation(border_mask, skimage.morphology.disk(width))
         new_image = blend_borders_w_bg(border_mask, image, grad_shading)
 
@@ -242,7 +243,7 @@ def change_border_width(border_mask, rng: RandomState, width: int, change_width:
 
     half_distance_band = (width_map[closest_border_y, closest_border_x] * 0.5)
     thickened_borders = (border_distance <= half_distance_band).astype(np.uint8) * 255
-    thickened_borders = ndimage.gaussian_filter(thickened_borders, sigma=1, truncate=1)
+    thickened_borders = ndimage.gaussian_filter(thickened_borders, sigma=0.3, truncate=0.6)
 
     return thickened_borders
 
@@ -270,12 +271,12 @@ def smooth_border_mask(border_mask: BorderMask):
     return border_mask.astype(np.int8)
 
 
-def compute_3d_border_effect(border_mask: BorderMask, rng: RandomState, voronoi_light_direction: List[int],
+def compute_3d_border_effect(border_mask: BorderMask, rng: RandomState, light_direction: List[int],
                              voronoi_shading_color_range: List[int]) -> GradientImage:
     """ Compute borders colors to make it look like 3D edges. """
 
     # todo do the 3d effect for the whole image at once?
-    height_map = get_height_map(border_mask, 2)
+    height_map = get_height_map(border_mask, 1.5)
     dx, dy = np.gradient(height_map)
     # dz points perpendicularly away from the surface
     dz = np.ones_like(height_map)
@@ -283,8 +284,8 @@ def compute_3d_border_effect(border_mask: BorderMask, rng: RandomState, voronoi_
     norm = np.linalg.norm(normals, axis=2, keepdims=True)
     normals /= norm + 1e-8  # avoid division by zero
 
-    # todo light direction correspondence to the emboss?
-    light_dir = np.array(voronoi_light_direction)
+    # [x, y, z]: -x -> light from right; y -> light from top; large z -> light from top
+    light_dir = np.array(light_direction)
     light_dir = light_dir / np.linalg.norm(light_dir)
 
     # transform the color to specified values range
@@ -293,9 +294,11 @@ def compute_3d_border_effect(border_mask: BorderMask, rng: RandomState, voronoi_
     gradient_shading = ((gradient_shading - gradient_shading.min()) /
                         (gradient_shading.max() - gradient_shading.min() + 1e-8))
 
-    lower, upper = [x + rng.randint(-10, 10) for x in voronoi_shading_color_range]
+    gradient_shading = ndimage.gaussian_filter(gradient_shading, sigma=0.35)
+
+    lower, upper = [x + rng.randint(-5, 5) for x in voronoi_shading_color_range]
     gradient_shading = gradient_shading * (upper - lower) + lower
-    gradient_shading = ndimage.gaussian_filter(gradient_shading, sigma=1)
+    # gradient_shading = ndimage.gaussian_filter(gradient_shading, sigma=1)
 
     # when should be cast to int?
     return gradient_shading
@@ -303,7 +306,7 @@ def compute_3d_border_effect(border_mask: BorderMask, rng: RandomState, voronoi_
 
 def blend_borders_w_bg(border_mask: BorderMask, image: Image, grad_shading: GradientImage) -> Image:
     """ Blends the 3d border effect image with the original image according to the height map. """
-    height_map = get_height_map(border_mask, 2)
+    height_map = get_height_map(border_mask, 1.5)
     border_mask = border_mask.astype(bool)
     new_image = image.copy()
 
@@ -358,14 +361,12 @@ def add_porous_texture(image: Image, rng: RandomState, dark: bool, density_range
     y_impulse_coords = rng.randint(0, h, size=num)
     x_impulse_coords = rng.randint(0, w, size=num)
     radii = rng.uniform(size_range[0], size_range[1], size=num)
+
     for y, x, r, a in zip(y_impulse_coords, x_impulse_coords, radii, impulse_strengths):
         cv2.circle(texture, (int(x), int(y)), int(round(r)), float(a), thickness=-1)
     # texture[y_impulse_coords, x_impulse_coords] = impulse_strengths
 
-    # blur to make smooth pits
     texture = ndimage.gaussian_filter(texture, blur_size)
-
-    # adjust intensity of impulses
     texture = texture * intensity
 
     if dark:
@@ -396,3 +397,27 @@ def get_height_map(border_mask: BorderMask, sigma: float) -> Image:
     # plt.show()
 
     return height_map
+
+
+def add_corner_blur(image: Image, rng: RandomState, radius_range: List[int], blur_size: List[int]) -> Image:
+    h, w = image.shape
+    corners = [[0, 0], [w, 0], [w, h], [0, h]]
+    i = rng.randint(0, len(corners))
+    corner = corners[i]
+
+    # make circular mask in that corner
+    mask = np.zeros((h, w), np.uint8)
+    radius = rng.randint(*radius_range)
+    cv2.circle(mask, corner, radius, 255, -1)
+
+    # feather edges
+    feather = rng.randint(radius // 8, radius // 6)
+    mask = cv2.GaussianBlur(mask, (0, 0), feather)
+    alpha = mask.astype(np.float32) / 255.0
+
+    blur = rng.randint(*blur_size) | 1
+    blurred = cv2.GaussianBlur(image, (blur, blur), 0)
+    result = (blurred * alpha + image * (1 - alpha)).astype(np.uint8)
+
+    return result
+
