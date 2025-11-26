@@ -11,7 +11,7 @@ from src.type_definitions import Image, Color, Point, RandomState, Mask, Contour
 
 def add_precipitates(image: Image, seed: int, *, precipitate_color_range: Color, precipitate_num_range: List[int],
                      precipitate_size_range: List[int], precipitate_size_distribution: List[int],
-                     precipitate_shading_color_range: List[int], **kwargs) \
+                     precipitate_shading_color_range: List[int], light_direction: List[int], **kwargs) \
         -> Tuple[Image, Mask]:
     rng = np.random.RandomState(seed)
     emboss_rng = np.random.RandomState(seed+1)
@@ -29,9 +29,9 @@ def add_precipitates(image: Image, seed: int, *, precipitate_color_range: Color,
         cv2.fillPoly(mask, [contour], mask_color)
         cv2.fillPoly(temp_mask, [contour], mask_color)
 
-        image = add_individual_emboss(temp_mask, image, radius, emboss_rng, precipitate_shading_color_range)
+        image = add_individual_emboss(temp_mask, image, radius, emboss_rng, precipitate_shading_color_range,
+                                      light_direction)
         image = add_feather_effect(image, temp_mask, radius)
-        image = add_shading_noise(image, temp_mask, radius)
 
     return image, mask
 
@@ -67,65 +67,95 @@ def generate_precipitate_contour(image: Image, radius: int, rng: RandomState) ->
     return contour
 
 
+def generate_precip_size(rng: RandomState, size_range: List[int], distribution: List[int]) -> int:
+    breaks = np.linspace(size_range[0], size_range[1], len(distribution) + 1)
+    probabilities = np.array(distribution) / np.sum(distribution)
+    index = rng.choice(len(distribution), p=probabilities)
+
+    # sample uniform in area, not radius
+    r1, r2 = breaks[index], breaks[index + 1]
+    radius = np.sqrt(rng.uniform(r1 ** 2, r2 ** 2))
+    return int(radius)
+
+
+def compute_emboss_size(radius: int, rng: RandomState) -> int:
+    # size = int(0.6 * radius) + rng.randint(-radius//5, radius//5)
+    # size = max(5, size)
+    base = max(3, int(np.sqrt(radius) * 2))
+    jitter = rng.randint(-base // 4, base // 4)
+    size = max(5, base + jitter)
+    return size | 1
+
+
 def add_individual_emboss(temp_mask: Mask, image: Image, radius: int, rng: RandomState,
-                          precipitate_shading_color_range: List[int]) -> Image:
+                          precipitate_shading_color_range: List[int], light_direction: List[int]) -> Image:
     effect_size = compute_emboss_size(radius, rng)
+    shading = compute_gradient_shading(temp_mask, effect_size, light_direction)
+    shading_mask = create_shading_mask(temp_mask, effect_size)
 
-    shading, shading_mask = compute_gradient_shading(temp_mask, effect_size, precipitate_shading_color_range)
+    blur_size = int(effect_size * 0.6) | 1
+    blurred_rim = cv2.GaussianBlur(shading_mask.astype(float), (blur_size, blur_size), sigmaX=0)
 
-    blurred_border = cv2.GaussianBlur(shading_mask.astype(float), (effect_size, effect_size), sigmaX=0)
-    shading_strength = rng.randint(80, 225)
-    blurred_border = adjust_image_value_range(blurred_border, 20, shading_strength)
-    alpha = blurred_border.astype(np.float32) / 255.0
+    # nullify shading outside the rim
+    shading *= blurred_rim
+    shading = cv2.GaussianBlur(shading.astype(float), (blur_size // 4 | 1, blur_size // 4 | 1), sigmaX=0)
+
+    shading_low = min(max(precipitate_shading_color_range[0] + rng.randint(-10, 10), 0), 255)
+    shading_high = min(max(precipitate_shading_color_range[1] + rng.randint(-10, 10), 0), 255)
+    shading_rescaled = adjust_image_value_range(shading, shading_low, shading_high)
+
+    alpha = adjust_image_value_range(blurred_rim, 0, 1)
 
     temp_mask = temp_mask.astype(bool)
-    image[temp_mask] = (alpha[temp_mask] * shading[temp_mask] + (1 - alpha[temp_mask]) * image[temp_mask])
+    image[temp_mask] = (alpha[temp_mask] * shading_rescaled[temp_mask] + (1 - alpha[temp_mask]) * image[temp_mask])
+
+    # add some noise to brake uniformity
+    rim = np.clip(blurred_rim, 0.0, 1.0).astype(np.float32)
+    rim = cv2.dilate(rim, np.ones((blur_size, blur_size), np.float32), iterations=1)
+    noise = np.random.normal(0, 7, image.shape).astype(np.float32)
+    image += rim * noise
 
     return image
 
 
-def compute_gradient_shading(temp_mask: Mask, size: int, precipitate_shading_color_range: List[int])\
-        -> Tuple[Image, Mask]:
+def compute_gradient_shading(temp_mask: Mask, size: int, light_direction: List[int]) -> Image:
     # need to make the mask smaller since the gradient is computed around the border
-    erosion = int(size // 4)
+    erosion = max(1, int(size / 2))
     temp_mask = cv2.erode(temp_mask, np.ones((erosion, erosion), np.uint8), iterations=1)
-    elevation = np.pi / 2.5  # radians
-    azimuth = np.pi / 2.2  # where is the light source
-    depth = 20  # how high is the light source - changes the light strength
 
-    # Compute unit incident light direction
-    gd = np.cos(elevation)
-    light_dir = np.array([gd * np.cos(azimuth), gd * np.sin(azimuth), np.sin(elevation)])
+    light_dir = np.array(light_direction, dtype=np.float32)
+    light_dir[1] *= -1  # invert axis to match matrix shading
+    light_dir[0] *= -1
+    light_dir /= np.linalg.norm(light_dir) + 1e-8
 
+    depth = 20
     unit_normals = get_unit_normals(temp_mask, size, depth)
 
-    # Compute shading using dot product
-    shading = 255.0 * np.tensordot(light_dir, unit_normals, axes=(0, 0))
-    only_shading = remove_shading_background(shading)
-    shading_mask = (only_shading > 0).astype(bool)
-
-    ksize = size // 2 | 1
-    shading_blurred = cv2.GaussianBlur(only_shading, (ksize, ksize), sigmaX=0)
-    shading_normalized = adjust_image_value_range(shading_blurred, *precipitate_shading_color_range)
-
-    return shading_normalized, shading_mask
-
-
-def remove_shading_background(shading: Image) -> Image:
-    image_8bit = cv2.convertScaleAbs(shading)
-    _, border = cv2.threshold(image_8bit, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)
-    eroded = cv2.erode(border, np.ones((2, 2), np.uint8), iterations=1)
-    shading[eroded == 0] = 0
+    shading = np.tensordot(light_dir, unit_normals, axes=(0, 0))  # [-1, 1]
+    # rescale the range to get dark shadows
+    shading = (1 + shading) * 0.65 - 0.3  # (1 + shading) -> [0, 2], *0.65 -> [0, 1.3], -0.3 -> [-0.3, 1.0]
 
     return shading
 
 
+def create_shading_mask(temp_mask: Mask, size: int) -> Mask:
+    erosion = max(1, int(size / 2))
+    temp_mask = cv2.erode(temp_mask, np.ones((erosion, erosion), np.uint8), iterations=1)
+
+    band_size = max(1, size // 2) | 1
+    struct_elem = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (band_size, band_size))
+    shading_mask = cv2.morphologyEx(temp_mask, cv2.MORPH_GRADIENT, struct_elem).astype(bool)
+
+    return shading_mask
+
+
 def get_unit_normals(temp_mask: Mask, size: int, depth: int) -> NDArray[np.float32]:
     # blur the mask to increase the gradient area
-    size = size if size % 2 == 1 else size + 1
-    temp_mask_blurred = cv2.GaussianBlur(temp_mask, (size, size), 2.0)
+    kernel_size = max(1, (size // 2) | 1)
+    temp_mask_blurred = cv2.GaussianBlur(temp_mask.astype(np.float32), (kernel_size, kernel_size), 1.0)
+
     grad_x, grad_y = np.gradient(temp_mask_blurred)
-    grad_x, grad_y = grad_x * depth / 100, grad_y * depth / 100
+    grad_x, grad_y = grad_x * (depth / 100.0), grad_y * (depth / 100.0)
 
     grad_magnitude = np.sqrt(grad_x ** 2 + grad_y ** 2 + 1.0)
     unit_normals = np.stack((grad_x / grad_magnitude, grad_y / grad_magnitude, 1.0 / grad_magnitude), axis=0)
@@ -143,24 +173,6 @@ def adjust_image_value_range(image: Image, low: int, high: int) -> Image:
     return scaled
 
 
-def compute_emboss_size(radius: int, rng: RandomState) -> int:
-    size = int(radius ** 1 / 2) + 1
-    size += rng.randint(- size // 2, size // 2)
-    size = size if size % 2 == 1 else size + 1
-
-    return size
-
-
-def generate_precip_size(rng: RandomState, size_range: List[int], distribution: List[int]) -> int:
-    breaks = np.ceil(np.linspace(size_range[0], size_range[1], len(distribution) + 1)).astype(int)
-    probabilities = np.array(distribution) / np.sum(distribution)
-    chosen_index = rng.choice(len(distribution), p=probabilities)
-
-    size = rng.randint(breaks[chosen_index], breaks[chosen_index + 1])
-
-    return size
-
-
 def add_feather_effect(image: Image, temp_mask: Mask, radius: int) -> Image:
     dilation_size = max(radius // 4, 3)
     erosion_size = max(radius // 6, 2)
@@ -174,18 +186,3 @@ def add_feather_effect(image: Image, temp_mask: Mask, radius: int) -> Image:
     feathered_image = (image * (1 - blurred_mask) + blurred_image * blurred_mask)
 
     return feathered_image
-
-
-def add_shading_noise(image: Image, temp_mask: Mask, radius) -> Image:
-    new_image = image.copy()
-
-    dilation_size = max(radius // 5, 3)
-    erosion_size = max(radius // 2, 2)
-    dilated_mask = cv2.dilate(temp_mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (dilation_size, dilation_size)))
-    eroded_mask = cv2.erode(temp_mask, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (erosion_size, erosion_size)))
-
-    loop_mask = cv2.absdiff(dilated_mask, eroded_mask) > 0
-    noise = np.random.normal(0, 3, image.shape).astype(np.float32)
-    new_image[loop_mask] = image[loop_mask] + noise[loop_mask]
-
-    return new_image
