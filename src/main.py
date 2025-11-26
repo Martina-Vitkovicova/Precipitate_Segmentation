@@ -1,41 +1,62 @@
+from pathlib import Path
+
 import numpy as np
 
 from generators.images_gen import generate_image, save_images
 from src.image_visualization import show_image_mask
 
-GENERATION = 15
-IMG_PARAMS_PATH = "../config/img_params.json"
+GENERATION = "cl4"
+IMG_PARAMS_PATH = "../config/img_params_cl4.json"
 IMG_SAVE_PATH = "../../Data/gen"
 
 
-def generate(num=1, gen=14, img_params_path="../config/img_params.json", img_save_path="../../Data/gen",
-             show=True, save=True, random_seeds=False, seeds_path="seeds.txt"):
+def _read_seeds_file(path, limit=None):
+    seeds = []
+    with open(path, "r") as file:
+        for _ in file:
+            seeds.append(int(file.readline()))
+            if limit is not None and len(seeds) >= limit:
+                break
+    if len(seeds) < limit:
+        print("Not enough seeds in seeds.txt — switching to random.")
+        rng = np.random.RandomState()
+        seeds += [int(rng.randint(0, 10 ** 9)) for _ in range(limit - len(seeds))]
+
+    return seeds
+
+
+def generate(num=1, gen=1, img_params_path="../config/img_params.json", img_save_path="../../Data/gen",
+             show=True, save=True, seed=22, seeds_path="seeds.txt"):
     img_save_path = f"{img_save_path}_{gen}"
 
-    with open(seeds_path, "r") as file:
-        if not random_seeds and num > sum(1 for _ in file):
-            return print("Not enough seeds in seeds.txt")
-        file.seek(0)
+    if seed is not None:  # seed available
+        if num == 1:
+            seeds = [int(seed)]
+        else:
+            # generate a reproducible sequence from that seed
+            rng = np.random.RandomState(int(seed))
+            seeds = [int(rng.randint(0, 10 ** 9)) for _ in range(num)]
+    elif seeds_path is not None and Path(seeds_path).exists():  # file available
+        seeds = _read_seeds_file(seeds_path, limit=num)
+    else:  # otherwise random seeds
+        rng = np.random.RandomState()
+        seeds = [int(rng.randint(0, 10 ** 9)) for _ in range(num)]
 
-        for _ in range(num):
-            if random_seeds:
-                root_seed = np.random.randint(0, 10 ** 5)
-            else:
-                root_seed = int(file.readline())
+    for root_seed in seeds:
+        img, mask = generate_image(root_seed, img_params_path)
 
-            img, mask = generate_image(root_seed, img_params_path)
-
-            if show:
-                show_image_mask(img, mask)
-            if save:
-                save_images(img_save_path, root_seed, img, mask, img_params_path, gen)
+        if show:
+            show_image_mask(img, mask)
+        if save:
+            save_images(img_save_path, root_seed, img, mask, img_params_path, gen)
 
 
 if __name__ == "__main__":
     generate(gen=GENERATION,
              img_params_path=IMG_PARAMS_PATH,
              img_save_path=IMG_SAVE_PATH,
-             save=True,
-             show=False,
-             random_seeds=False,
-             num=30)
+             save=False,
+             show=True,
+             seed=None,
+             seeds_path=None,
+             num=1)
