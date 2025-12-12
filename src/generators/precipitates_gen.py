@@ -9,9 +9,10 @@ from scipy.interpolate import splprep, splev
 from src.type_definitions import Image, Color, Point, RandomState, Mask, Contour, Coords
 
 
-def add_precipitates(image: Image, seed: int, *, precipitate_color_range: Color, precipitate_num_range: List[int],
+def add_precipitates(image: Image, seed: int, *, light_direction: List[int], precipitate_color_range: Color,
+                     precipitate_num_range: List[int],
                      precipitate_size_range: List[int], precipitate_size_distribution: List[int],
-                     precipitate_shading_color_range: List[int], light_direction: List[int], **kwargs) \
+                     precipitate_shading_color_range: List[int], **kwargs) \
         -> Tuple[Image, Mask]:
     rng = np.random.RandomState(seed)
     emboss_rng = np.random.RandomState(seed+1)
@@ -39,10 +40,10 @@ def add_precipitates(image: Image, seed: int, *, precipitate_color_range: Color,
 def generate_precipitate_contour(image: Image, radius: int, rng: RandomState) -> Contour:
     center = (rng.randint(0, image.shape[1]), rng.randint(0, image.shape[0]))
 
-    num_segments = min(20, max(8, int(radius ** 0.5)))
-    radius_variation = radius ** 1 / 3
+    num_segments = min(25, max(8, int(radius ** 0.5)))
 
     # generate random radii with variation
+    radius_variation = radius ** (1 / 3)
     radii = radius + rng.uniform(-radius_variation, radius_variation, num_segments)
     radii = np.clip(radii, 1, None)
 
@@ -51,13 +52,11 @@ def generate_precipitate_contour(image: Image, radius: int, rng: RandomState) ->
     x = center[0] + radii * np.cos(angles)
     y = center[1] + radii * np.sin(angles)
 
-    x = np.append(x, x[0])
-    y = np.append(y, y[0])
-
     # parametric spline with periodic boundary conditions
     spline_degree = 3
     num_spline_points = 1000
-    tck, u, *_ = splprep([x, y], s=10, per=True, k=min(spline_degree, len(x) - 1))
+    tck, u, *_ = splprep([x, y], s=radius*0.1, per=True, k=min(spline_degree, len(x) - 1))
+
     u_fine = np.linspace(0, 1, num_spline_points)
     x_smooth, y_smooth = splev(u_fine, tck)
     x_coords, y_coords = np.array(x_smooth).astype(np.int32), np.array(y_smooth).astype(np.int32)
@@ -73,8 +72,11 @@ def generate_precip_size(rng: RandomState, size_range: List[int], distribution: 
     index = rng.choice(len(distribution), p=probabilities)
 
     # sample uniform in area, not radius
-    r1, r2 = breaks[index], breaks[index + 1]
-    radius = np.sqrt(rng.uniform(r1 ** 2, r2 ** 2))
+    # r1, r2 = breaks[index], breaks[index + 1]
+    # radius = np.sqrt(rng.uniform(r1 ** 2, r2 ** 2))
+
+    radius = rng.randint(breaks[index], breaks[index + 1])
+
     return int(radius)
 
 
@@ -113,6 +115,7 @@ def add_individual_emboss(temp_mask: Mask, image: Image, radius: int, rng: Rando
     rim = np.clip(blurred_rim, 0.0, 1.0).astype(np.float32)
     rim = cv2.dilate(rim, np.ones((blur_size, blur_size), np.float32), iterations=1)
     noise = np.random.normal(0, 7, image.shape).astype(np.float32)
+    image = image.astype(np.float32)
     image += rim * noise
 
     return image

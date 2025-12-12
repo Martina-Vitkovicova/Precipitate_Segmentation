@@ -7,6 +7,7 @@ from matplotlib import pyplot as plt
 from perlin_numpy import generate_perlin_noise_2d
 
 from src.generators.background_gen import voronoi_bg
+from src.generators.corrosion_pits_gen import add_corrosion_pits
 from src.generators.precipitates_gen import add_precipitates
 from src.type_definitions import Image, RandomState
 
@@ -21,11 +22,13 @@ def generate_image(root_seed, img_params_path):
         img_params = json.load(file)
 
     background = voronoi_bg(vor_seed, **img_params)
-    image, mask = add_precipitates(background, precip_seed, **img_params)
+    image = add_corrosion_pits(background, rng.randint(0, 10 ** 5), **img_params)
+    image, mask = add_precipitates(image, precip_seed, **img_params)
     # image = add_perlin_noise(image, rng, alpha=0.05, divisor=2)
     image = add_gaussian_noise(image, rng)
-    image = add_illumination_gradient(image, illumination_rng, img_params["img_illumination_gradient_strength_range"],
-                                      img_params["img_illumination_gradient_angle_range"])
+    if img_params["img_illumination_gradient"] == "True":
+        image = add_illumination_gradient(image, illumination_rng, img_params["img_illumination_gradient_strength_range"],
+                                          img_params["img_illumination_gradient_angle_range"])
 
     return image, mask
 
