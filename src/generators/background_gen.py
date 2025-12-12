@@ -17,15 +17,20 @@ from src.type_definitions import (Image, IndexedRegion, Vertices, Edge, Point, R
                                   GradientImage)
 
 
-def voronoi_bg(seed: int, *, img_size: List[int], voronoi_regions_num_range: List[int], voronoi_color_range: List[int],
+# TODO check bool vs string types
+
+def voronoi_bg(seed: int, *, img_size: List[int], light_direction: List[int],voronoi_regions_num_range: List[int],
+               voronoi_color_range: List[int],
                voronoi_border_width: int, voronoi_change_border_width: str, voronoi_border_jaggedness: float,
-               voronoi_border_noise: float, voronoi_border_3d: str, light_direction: List[int],
-               voronoi_shading_color_range: List[int], voronoi_perlin_noise_alpha_range: List[int],
+               voronoi_border_noise: float, voronoi_border_3d: str,
+               voronoi_shading_color_range: List[int], voronoi_perlin_noise: str,
+               voronoi_perlin_noise_alpha_range: List[int],
                voronoi_perlin_noise_scale_range: List[int], voronoi_gaussian_noise_alpha_range: List[int],
                voronoi_porous_texture: str, voronoi_porous_texture_density_range: List[float],
                voronoi_porous_texture_blur_range: List[float], voronoi_porous_texture_intensity_range: List[float],
                voronoi_porous_texture_size_range: List[float], voronoi_corner_blur: str,
-               voronoi_corner_blur_radius_range: List[int], voronoi_corner_blur_intensity_range: List[int], **kwargs) -> Image:
+               voronoi_corner_blur_radius_range: List[int], voronoi_corner_blur_intensity_range: List[int],
+               **kwargs) -> Image:
     """
     Creates a background matrix image consisting of regions (grains) with borders.
 
@@ -81,8 +86,10 @@ def voronoi_bg(seed: int, *, img_size: List[int], voronoi_regions_num_range: Lis
         row, col = skdraw.polygon(y_coords, x_coords, shape=image.shape)
         color = rng.randint(*voronoi_color_range)
         image[row, col] = color
-        image = add_perlin_noise(image, perlin_rng, row, col, voronoi_perlin_noise_alpha_range,
-                                 voronoi_perlin_noise_scale_range)
+
+        if voronoi_perlin_noise == "True":
+            image = add_perlin_noise(image, perlin_rng, row, col, voronoi_perlin_noise_alpha_range,
+                                     voronoi_perlin_noise_scale_range)
         # if gauss_rng.randint(1, 5) > 3:
         #     image = add_gaussian_noise(image, gauss_rng, row, col, voronoi_gaussian_noise_alpha_range)
 
@@ -96,11 +103,9 @@ def voronoi_bg(seed: int, *, img_size: List[int], voronoi_regions_num_range: Lis
         image = add_corner_blur(image, blur_rng, voronoi_corner_blur_radius_range, voronoi_corner_blur_intensity_range)
 
     if voronoi_porous_texture == "True":
-        image = add_porous_texture(image, texture_rng, True, voronoi_porous_texture_density_range,
-                                   voronoi_porous_texture_blur_range, voronoi_porous_texture_intensity_range, voronoi_porous_texture_size_range)
-        image = add_porous_texture(image, texture_rng, False, list(np.array(voronoi_porous_texture_density_range)*0.7),
-                                   voronoi_porous_texture_blur_range, list(np.array(voronoi_porous_texture_intensity_range)*0.7),
-                                   list(np.array(voronoi_porous_texture_size_range)*0.7))
+        image = add_porous_texture(image, texture_rng, light_direction, voronoi_porous_texture_density_range,
+                                   voronoi_porous_texture_blur_range, voronoi_porous_texture_intensity_range,
+                                   voronoi_porous_texture_size_range)
     return image
 
 
@@ -344,39 +349,59 @@ def add_gaussian_noise(image: Image, rng: RandomState, row: Coords, col: Coords,
     return new_image
 
 
-def add_porous_texture(image: Image, rng: RandomState, dark: bool, density_range: List[float], blur_size_range: List[float],
-                       intensity_range: List[float], size_range: List[float]) -> Image:
-    # TODO check bool vs string types
+def add_porous_texture(image: Image, rng: RandomState, light_dir, density_range: List[float],
+                       blur_size_range: List[float], intensity_range: List[float], size_range: List[float]) -> Image:
     h, w = image.shape
+
     density = rng.uniform(*density_range)
-    blur_size = rng.uniform(*blur_size_range)
+    blur = rng.uniform(*blur_size_range)
     intensity = rng.uniform(*intensity_range)
+    texture = _draw_impulses(h, w, rng, density, size_range)
 
-    # generate impulses and their strengths
+    light_tex = ndimage.gaussian_filter(texture, blur)
+    light_tex -= light_tex.mean()
+
+    dark_tex = ndimage.gaussian_filter(texture, blur * 1.2)
+    dx, dy = _compute_shift(light_dir, size_range)
+    dark_tex = ndimage.shift(dark_tex, shift=(dy, dx), mode="constant", cval=0.0, order=1)
+    dark_tex = -2.0 * dark_tex  # make dark areas stronger after blur
+    dark_tex -= dark_tex.mean()
+
+    combined = (light_tex + dark_tex) * intensity
+    return image + combined
+
+
+def _compute_shift(light_dir, size_range):
+    light_x, light_y, _ = light_dir
+    light_x, light_y = -light_x, light_y  # invert axis to match matrix shading
+    light_vec = np.array([light_x, light_y], dtype=np.float32)
+    light_vec /= np.linalg.norm(light_vec) + 1e-6
+
+    shift_px = (size_range[0] + size_range[1]) / 2.0 + 2.0
+    dx = float(light_vec[0] * shift_px)
+    dy = float(light_vec[1] * shift_px)
+
+    return dx, dy
+
+
+def _draw_impulses(h, w, rng, density, size_range):
     texture = np.zeros((h, w), dtype=np.float32)
-    num = rng.poisson(density * h * w)
-    impulse_strengths = rng.lognormal(mean=0.0, sigma=0.7, size=num).astype(np.float32)
+    num = int(rng.poisson(density * h * w))
+    if num <= 0:
+        return texture
 
-    # add the impulses to the texture
     y_impulse_coords = rng.randint(0, h, size=num)
     x_impulse_coords = rng.randint(0, w, size=num)
     radii = rng.uniform(size_range[0], size_range[1], size=num)
+    colors = rng.lognormal(mean=0.0, sigma=0.4, size=num).astype(np.float32)
 
-    for y, x, r, a in zip(y_impulse_coords, x_impulse_coords, radii, impulse_strengths):
-        cv2.circle(texture, (int(x), int(y)), int(round(r)), float(a), thickness=-1)
-    # texture[y_impulse_coords, x_impulse_coords] = impulse_strengths
+    for y, x, r, c in zip(y_impulse_coords, x_impulse_coords, radii, colors):
+        radius = int(round(r))
+        color = (float(c), float(c), float(c))
+        if radius > 0:
+            cv2.circle(texture, (int(x), int(y)), radius, color, thickness=-1)
 
-    texture = ndimage.gaussian_filter(texture, blur_size)
-    texture = texture * intensity
-
-    if dark:
-        texture = -texture
-    texture -= texture.mean()  # center around 0
-
-    tex = image + texture
-    # tex = (np.clip(tex, 0, 1) * 255).astype(np.uint8)
-
-    return tex
+    return texture
 
 
 def get_height_map(border_mask: BorderMask, sigma: float) -> Image:
@@ -420,4 +445,3 @@ def add_corner_blur(image: Image, rng: RandomState, radius_range: List[int], blu
     result = (blurred * alpha + image * (1 - alpha)).astype(np.uint8)
 
     return result
-
