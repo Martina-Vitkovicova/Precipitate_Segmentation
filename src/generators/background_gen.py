@@ -24,13 +24,14 @@ def voronoi_bg(seed: int, *, img_size: List[int], light_direction: List[int],vor
                voronoi_border_width: int, voronoi_change_border_width: str, voronoi_border_jaggedness: float,
                voronoi_border_noise: float, voronoi_border_3d: str,
                voronoi_shading_color_range: List[int], voronoi_perlin_noise: str,
-               voronoi_perlin_noise_alpha_range: List[int],
-               voronoi_perlin_noise_scale_range: List[int], voronoi_gaussian_noise_alpha_range: List[int],
+               voronoi_perlin_noise_alpha_range: List[int], voronoi_perlin_noise_scale_range: List[int],
+               voronoi_gaussian_noise: str, voronoi_gaussian_noise_alpha_range: List[int],
                voronoi_porous_texture: str, voronoi_porous_texture_density_range: List[float],
                voronoi_porous_texture_blur_range: List[float], voronoi_porous_texture_intensity_range: List[float],
                voronoi_porous_texture_size_range: List[float], voronoi_corner_blur: str,
                voronoi_corner_blur_radius_range: List[int], voronoi_corner_blur_intensity_range: List[int],
-               **kwargs) -> Image:
+               voronoi_bottom_blur: str, voronoi_bottom_blur_height_range: List[int],
+               voronoi_bottom_blur_intensity_range: List[int], **kwargs) -> Image:
     """
     Creates a background matrix image consisting of regions (grains) with borders.
 
@@ -67,7 +68,8 @@ def voronoi_bg(seed: int, *, img_size: List[int], light_direction: List[int],vor
     borders_rng = np.random.RandomState(seed + 2)
     gauss_rng = np.random.RandomState(seed + 3)
     texture_rng = np.random.RandomState(seed + 4)
-    blur_rng = np.random.RandomState(seed + 5)
+    corner_blur_rng = np.random.RandomState(seed + 5)
+    bottom_blur_rng = np.random.RandomState(seed + 6)
     width, height = img_size
     # image = np.zeros((height, width), dtype=np.float32)
     image = np.full((height, width), 140, dtype=np.float32)
@@ -90,22 +92,27 @@ def voronoi_bg(seed: int, *, img_size: List[int], light_direction: List[int],vor
         if voronoi_perlin_noise == "True":
             image = add_perlin_noise(image, perlin_rng, row, col, voronoi_perlin_noise_alpha_range,
                                      voronoi_perlin_noise_scale_range)
-        # if gauss_rng.randint(1, 5) > 3:
-        #     image = add_gaussian_noise(image, gauss_rng, row, col, voronoi_gaussian_noise_alpha_range)
+        if voronoi_gaussian_noise == "True":
+            image = add_gaussian_noise(image, gauss_rng, row, col, voronoi_gaussian_noise_alpha_range)
 
         perim_row, perim_col = skdraw.polygon_perimeter(y_coords, x_coords, shape=image.shape)
         border_mask[perim_row, perim_col] = 1
-
-    image = modify_borders(image, border_mask, voronoi_border_width, voronoi_change_border_width, borders_rng,
-                           130, voronoi_border_3d, light_direction, voronoi_shading_color_range)
-
-    if voronoi_corner_blur == "True":
-        image = add_corner_blur(image, blur_rng, voronoi_corner_blur_radius_range, voronoi_corner_blur_intensity_range)
 
     if voronoi_porous_texture == "True":
         image = add_porous_texture(image, texture_rng, light_direction, voronoi_porous_texture_density_range,
                                    voronoi_porous_texture_blur_range, voronoi_porous_texture_intensity_range,
                                    voronoi_porous_texture_size_range)
+
+    image = modify_borders(image, border_mask, voronoi_border_width, voronoi_change_border_width, borders_rng,
+                           130, voronoi_border_3d, light_direction, voronoi_shading_color_range)
+
+    if voronoi_corner_blur == "True":
+        image = add_corner_blur(image, corner_blur_rng, voronoi_corner_blur_radius_range,
+                                voronoi_corner_blur_intensity_range)
+    if voronoi_bottom_blur == "True":
+        image = add_bottom_blur(image, bottom_blur_rng, voronoi_bottom_blur_height_range,
+                                voronoi_bottom_blur_intensity_range)
+
     return image
 
 
@@ -209,7 +216,7 @@ def modify_borders(image: Image, border_mask: BorderMask, width: int, change_wid
 
     if voronoi_border_3d == "False":
         new_image = image.copy()
-        new_image[border_mask > 0] = color + rng.randint(-15, -14)
+        new_image[border_mask > 0] = color + rng.randint(-20, -19)
     else:
         grad_shading = compute_3d_border_effect(border_mask, rng, light_direction, voronoi_shading_color_range)
         border_mask = skimage.morphology.dilation(border_mask, skimage.morphology.disk(width))
@@ -233,7 +240,7 @@ def change_border_width(border_mask, rng: RandomState, width: int, change_width:
         length = contour.shape[0]
         if length < 3:
             continue
-        num_control_points = int(np.sqrt(length)) // 2
+        num_control_points = int(np.sqrt(length) * 0.7)
 
         xs = contour[:, 0].astype(int)
         ys = contour[:, 1].astype(int)
@@ -248,7 +255,7 @@ def change_border_width(border_mask, rng: RandomState, width: int, change_width:
 
     half_distance_band = (width_map[closest_border_y, closest_border_x] * 0.5)
     thickened_borders = (border_distance <= half_distance_band).astype(np.uint8) * 255
-    thickened_borders = ndimage.gaussian_filter(thickened_borders, sigma=0.3, truncate=0.6)
+    thickened_borders = ndimage.gaussian_filter(thickened_borders, sigma=width//2, truncate=0.6)
 
     return thickened_borders
 
@@ -361,10 +368,10 @@ def add_porous_texture(image: Image, rng: RandomState, light_dir, density_range:
     light_tex = ndimage.gaussian_filter(texture, blur)
     light_tex -= light_tex.mean()
 
-    dark_tex = ndimage.gaussian_filter(texture, blur * 1.2)
+    dark_tex = ndimage.gaussian_filter(texture, blur * 1.1)
     dx, dy = _compute_shift(light_dir, size_range)
     dark_tex = ndimage.shift(dark_tex, shift=(dy, dx), mode="constant", cval=0.0, order=1)
-    dark_tex = -2.0 * dark_tex  # make dark areas stronger after blur
+    dark_tex = -1 * dark_tex  # make dark areas stronger after blur
     dark_tex -= dark_tex.mean()
 
     combined = (light_tex + dark_tex) * intensity
@@ -373,7 +380,7 @@ def add_porous_texture(image: Image, rng: RandomState, light_dir, density_range:
 
 def _compute_shift(light_dir, size_range):
     light_x, light_y, _ = light_dir
-    light_x, light_y = -light_x, light_y  # invert axis to match matrix shading
+    light_x, light_y = -light_x, -light_y  # invert axis to match matrix shading
     light_vec = np.array([light_x, light_y], dtype=np.float32)
     light_vec /= np.linalg.norm(light_vec) + 1e-6
 
@@ -445,3 +452,22 @@ def add_corner_blur(image: Image, rng: RandomState, radius_range: List[int], blu
     result = (blurred * alpha + image * (1 - alpha)).astype(np.uint8)
 
     return result
+
+
+def add_bottom_blur(image: Image, rng: RandomState, band_height_range: List[int], blur_ksize_range: List[int]) -> Image:
+    h, w = image.shape
+
+    band_size = int(rng.randint(*band_height_range) + 1)
+    mask = np.zeros((h, w), dtype=np.uint8)
+    mask[h - band_size: h, :] = 255
+
+    # feather the transition toward the interior
+    feather = rng.randint(band_size // 6, band_size // 4)
+    mask = cv2.GaussianBlur(mask, (0, 0), feather)
+    alpha = mask.astype(np.float32) / 255.0
+
+    k = int(rng.randint(*blur_ksize_range)) | 1
+    blurred = cv2.GaussianBlur(image, (k, k), 0)
+    out = (blurred.astype(np.float32) * alpha + image.astype(np.float32) * (1.0 - alpha))
+
+    return np.clip(out, 0, 255).astype(np.uint8)
