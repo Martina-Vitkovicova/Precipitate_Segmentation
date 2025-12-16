@@ -1,13 +1,14 @@
 import json
 import os
 from pathlib import Path
+from typing import List
 
+import cv2
 import numpy as np
 from matplotlib import pyplot as plt
-from perlin_numpy import generate_perlin_noise_2d
 
 from src.generators.background_gen import voronoi_bg
-from src.generators.corrosion_pits_gen import add_corrosion_pits
+from src.generators.etch_pits_gen import add_etch_pits
 from src.generators.precipitates_gen import add_precipitates
 from src.type_definitions import Image, RandomState
 
@@ -17,20 +18,37 @@ def generate_image(root_seed, img_params_path):
     vor_seed = rng.randint(0, 10 ** 5)
     precip_seed = rng.randint(0, 10 ** 5)
     illumination_rng = np.random.RandomState(rng.randint(0, 10 ** 5))
+    corner_blur_rng = np.random.RandomState(rng.randint(0, 10 ** 5))
+    bottom_blur_rng = np.random.RandomState(rng.randint(0, 10 ** 5))
 
     with open(img_params_path, "r") as file:
         img_params = json.load(file)
 
     background = voronoi_bg(vor_seed, **img_params)
-    image = add_corrosion_pits(background, rng.randint(0, 10 ** 5), **img_params)
+    image = add_etch_pits(background, rng.randint(0, 10 ** 5), **img_params)
     image, mask = add_precipitates(image, precip_seed, **img_params)
-    # image = add_perlin_noise(image, rng, alpha=0.05, divisor=2)
+
+    if img_params.get("corner_blur") == "True":
+        image = add_corner_blur(image, corner_blur_rng, **subparams(img_params, "corner_blur_"))
+
+    if img_params.get("bottom_blur") == "True":
+        image = add_bottom_blur(image, bottom_blur_rng, **subparams(img_params, "bottom_blur_"))
+
     image = add_gaussian_noise(image, rng)
-    if img_params["img_illumination_gradient"] == "True":
-        image = add_illumination_gradient(image, illumination_rng, img_params["img_illumination_gradient_strength_range"],
-                                          img_params["img_illumination_gradient_angle_range"])
+
+    if img_params.get("img_illumination_gradient") == "True":
+        image = add_illumination_gradient(image, illumination_rng, **subparams(img_params,
+                                                                               "img_illumination_gradient_"))
 
     return image, mask
+
+
+def subparams(params: dict, prefix: str) -> dict:
+    out = {}
+    for key, value in params.items():
+        if key.startswith(prefix):
+            out[key[len(prefix):]] = value
+    return out
 
 
 def save_images(root_path, seed, img, mask, img_params_path=None, gen=1):
@@ -58,18 +76,6 @@ def save_metadata(img_params_path, seed, gen, path):
         json.dump(updated_img_params, file, indent=4)
 
 
-def add_perlin_noise(image: Image, rng: RandomState, alpha: float, divisor: int) -> Image:
-    """ Adds perlin noise to the whole image. """
-
-    height, width = image.shape
-    res = (height // divisor, width // divisor)
-    noise = generate_perlin_noise_2d((width, height), res, rng=rng)
-    noise -= noise.mean()
-    new_image = image + noise * alpha * 127.5
-
-    return new_image
-
-
 def add_gaussian_noise(image: Image, rng: RandomState):
     noise = rng.normal(0, 1, (1025, 1025))
     noise = noise[:-1, :-1]
@@ -93,6 +99,48 @@ def add_illumination_gradient(image, rng, strength_range, angle_range):
     grad = (grad - grad.min()) / (grad.max() - grad.min())  # normalize to 0–1
 
     strength = rng.uniform(*strength_range)
-    mask = 1.0 - strength + grad * strength * 2.0
+    mask = 1.0 - strength + grad * strength
 
     return image * mask
+
+
+def add_corner_blur(image: Image, rng: RandomState, radius_range: List[int], kernel_size_range: List[int]) -> Image:
+    h, w = image.shape
+    corners = [[0, 0], [w, 0], [w, h], [0, h]]
+    i = rng.randint(0, len(corners))
+    corner = corners[i]
+
+    # make circular mask in that corner
+    mask = np.zeros((h, w), np.uint8)
+    radius = rng.randint(*radius_range)
+    cv2.circle(mask, corner, radius, (255, 255, 255), -1)
+
+    # feather edges
+    feather = rng.randint(radius // 8, radius // 6)
+    mask = cv2.GaussianBlur(mask, (0, 0), feather)
+    alpha = mask.astype(np.float32) / 255.0
+
+    blur = rng.randint(*kernel_size_range) | 1
+    blurred = cv2.GaussianBlur(image, (blur, blur), 0)
+    result = (blurred * alpha + image * (1 - alpha)).astype(np.uint8)
+
+    return result
+
+
+def add_bottom_blur(image: Image, rng: RandomState, height_range: List[int], kernel_size_range: List[int]) -> Image:
+    h, w = image.shape
+
+    band_size = int(rng.randint(*height_range) + 1)
+    mask = np.zeros((h, w), dtype=np.uint8)
+    mask[h - band_size: h, :] = 255
+
+    # feather the transition toward the interior
+    feather = rng.randint(band_size // 6, band_size // 4)
+    mask = cv2.GaussianBlur(mask, (0, 0), feather)
+    alpha = mask.astype(np.float32) / 255.0
+
+    k = int(rng.randint(*kernel_size_range)) | 1
+    blurred = cv2.GaussianBlur(image, (k, k), 0)
+    out = (blurred.astype(np.float32) * alpha + image.astype(np.float32) * (1.0 - alpha))
+
+    return np.clip(out, 0, 255).astype(np.uint8)

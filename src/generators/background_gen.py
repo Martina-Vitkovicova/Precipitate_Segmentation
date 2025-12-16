@@ -28,10 +28,7 @@ def voronoi_bg(seed: int, *, img_size: List[int], light_direction: List[int],vor
                voronoi_gaussian_noise: str, voronoi_gaussian_noise_alpha_range: List[int],
                voronoi_porous_texture: str, voronoi_porous_texture_density_range: List[float],
                voronoi_porous_texture_blur_range: List[float], voronoi_porous_texture_intensity_range: List[float],
-               voronoi_porous_texture_size_range: List[float], voronoi_corner_blur: str,
-               voronoi_corner_blur_radius_range: List[int], voronoi_corner_blur_intensity_range: List[int],
-               voronoi_bottom_blur: str, voronoi_bottom_blur_height_range: List[int],
-               voronoi_bottom_blur_intensity_range: List[int], **kwargs) -> Image:
+               voronoi_porous_texture_size_range: List[float], **kwargs) -> Image:
     """
     Creates a background matrix image consisting of regions (grains) with borders.
 
@@ -68,8 +65,7 @@ def voronoi_bg(seed: int, *, img_size: List[int], light_direction: List[int],vor
     borders_rng = np.random.RandomState(seed + 2)
     gauss_rng = np.random.RandomState(seed + 3)
     texture_rng = np.random.RandomState(seed + 4)
-    corner_blur_rng = np.random.RandomState(seed + 5)
-    bottom_blur_rng = np.random.RandomState(seed + 6)
+
     width, height = img_size
     # image = np.zeros((height, width), dtype=np.float32)
     image = np.full((height, width), 140, dtype=np.float32)
@@ -105,13 +101,6 @@ def voronoi_bg(seed: int, *, img_size: List[int], light_direction: List[int],vor
 
     image = modify_borders(image, border_mask, voronoi_border_width, voronoi_change_border_width, borders_rng,
                            130, voronoi_border_3d, light_direction, voronoi_shading_color_range)
-
-    if voronoi_corner_blur == "True":
-        image = add_corner_blur(image, corner_blur_rng, voronoi_corner_blur_radius_range,
-                                voronoi_corner_blur_intensity_range)
-    if voronoi_bottom_blur == "True":
-        image = add_bottom_blur(image, bottom_blur_rng, voronoi_bottom_blur_height_range,
-                                voronoi_bottom_blur_intensity_range)
 
     return image
 
@@ -163,7 +152,6 @@ def divide_edge(start: Point, end: Point, rng: RandomState, img_size: List[int],
     # if it lies partially, we divide only the part of the line which lies in the area
     is_inside, new_start, new_end = cv2.clipLine((0, 0, *img_size), start, end)
     if not is_inside:
-        # todo should I clip this?
         return np.array([np.array(start), np.array(end)])
 
     noisy_points = [np.array(new_start)]
@@ -429,45 +417,3 @@ def get_height_map(border_mask: BorderMask, sigma: float) -> Image:
     # plt.show()
 
     return height_map
-
-
-def add_corner_blur(image: Image, rng: RandomState, radius_range: List[int], blur_size: List[int]) -> Image:
-    h, w = image.shape
-    corners = [[0, 0], [w, 0], [w, h], [0, h]]
-    i = rng.randint(0, len(corners))
-    corner = corners[i]
-
-    # make circular mask in that corner
-    mask = np.zeros((h, w), np.uint8)
-    radius = rng.randint(*radius_range)
-    cv2.circle(mask, corner, radius, 255, -1)
-
-    # feather edges
-    feather = rng.randint(radius // 8, radius // 6)
-    mask = cv2.GaussianBlur(mask, (0, 0), feather)
-    alpha = mask.astype(np.float32) / 255.0
-
-    blur = rng.randint(*blur_size) | 1
-    blurred = cv2.GaussianBlur(image, (blur, blur), 0)
-    result = (blurred * alpha + image * (1 - alpha)).astype(np.uint8)
-
-    return result
-
-
-def add_bottom_blur(image: Image, rng: RandomState, band_height_range: List[int], blur_ksize_range: List[int]) -> Image:
-    h, w = image.shape
-
-    band_size = int(rng.randint(*band_height_range) + 1)
-    mask = np.zeros((h, w), dtype=np.uint8)
-    mask[h - band_size: h, :] = 255
-
-    # feather the transition toward the interior
-    feather = rng.randint(band_size // 6, band_size // 4)
-    mask = cv2.GaussianBlur(mask, (0, 0), feather)
-    alpha = mask.astype(np.float32) / 255.0
-
-    k = int(rng.randint(*blur_ksize_range)) | 1
-    blurred = cv2.GaussianBlur(image, (k, k), 0)
-    out = (blurred.astype(np.float32) * alpha + image.astype(np.float32) * (1.0 - alpha))
-
-    return np.clip(out, 0, 255).astype(np.uint8)
