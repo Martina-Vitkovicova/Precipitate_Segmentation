@@ -9,28 +9,28 @@ from scipy.interpolate import splprep, splev
 from src.type_definitions import Image, Color, Point, RandomState, Mask, Contour, Coords
 
 
-def add_precipitates(image: Image, seed: int, *, light_direction: List[int], precipitate_color_range: Color,
-                     precipitate_num_range: List[int],
-                     precipitate_size_range: List[int], precipitate_size_distribution: List[int],
-                     precipitate_shading_color_range: List[int], **kwargs) \
+def add_precipitates(image: Image, seed: int, *, light_direction: List[int], color_range: Color,
+                     num_range: List[int],
+                     size_range: List[int], size_distribution: List[int],
+                     shading_color_range: List[int], **kwargs) \
         -> Tuple[Image, Mask]:
     rng = np.random.RandomState(seed)
     emboss_rng = np.random.RandomState(seed+1)
     mask = np.zeros(image.shape)
-    precip_num = rng.randint(*precipitate_num_range)
+    precip_num = rng.randint(*num_range)
     mask_color = (255, 255, 255)
 
     for _ in range(precip_num):
         temp_mask = np.zeros_like(image)
-        radius = generate_precip_size(rng, precipitate_size_range, precipitate_size_distribution)
+        radius = generate_precip_size(rng, size_range, size_distribution)
         contour = generate_precipitate_contour(image, radius, rng)
 
-        color = rng.randint(*precipitate_color_range)
+        color = rng.randint(*color_range)
         cv2.fillPoly(image, [contour], color)
         cv2.fillPoly(mask, [contour], mask_color)
         cv2.fillPoly(temp_mask, [contour], mask_color)
 
-        image = add_individual_emboss(temp_mask, image, radius, emboss_rng, precipitate_shading_color_range,
+        image = add_individual_emboss(temp_mask, image, radius, emboss_rng, shading_color_range,
                                       light_direction)
         image = add_feather_effect(image, temp_mask, radius)
 
@@ -90,7 +90,7 @@ def compute_emboss_size(radius: int, rng: RandomState) -> int:
 
 
 def add_individual_emboss(temp_mask: Mask, image: Image, radius: int, rng: RandomState,
-                          precipitate_shading_color_range: List[int], light_direction: List[int]) -> Image:
+                          shading_color_range: List[int], light_direction: List[int]) -> Image:
     effect_size = compute_emboss_size(radius, rng)
     shading = compute_gradient_shading(temp_mask, effect_size, light_direction)
     shading_mask = create_shading_mask(temp_mask, effect_size)
@@ -102,8 +102,8 @@ def add_individual_emboss(temp_mask: Mask, image: Image, radius: int, rng: Rando
     shading *= blurred_rim
     shading = cv2.GaussianBlur(shading.astype(float), (blur_size // 4 | 1, blur_size // 4 | 1), sigmaX=0)
 
-    shading_low = min(max(precipitate_shading_color_range[0] + rng.randint(-10, 10), 0), 255)
-    shading_high = min(max(precipitate_shading_color_range[1] + rng.randint(-10, 10), 0), 255)
+    shading_low = min(max(shading_color_range[0] + rng.randint(-10, 10), 0), 255)
+    shading_high = min(max(shading_color_range[1] + rng.randint(-10, 10), 0), 255)
     shading_rescaled = adjust_image_value_range(shading, shading_low, shading_high)
 
     alpha = adjust_image_value_range(blurred_rim, 0, 1)

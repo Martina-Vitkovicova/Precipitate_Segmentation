@@ -10,32 +10,32 @@ from src.generators.background_gen import add_porous_texture
 # todo varied offsets x scales
 
 
-def add_etch_pits(image: np.ndarray, seed: int, *, etch_pits_num_range: List[int],
-                       etch_pits_size_range: List[int], etch_pits_color_range: List[int],
-                       light_direction: List[int], etch_pits_shading_values: List[int],
-                       etch_pits_texture_density_range: List[float],
-                       etch_pits_texture_blur_range: List[float],
-                       etch_pits_texture_intensity_range: List[float],
-                       etch_pits_texture_size_range: List[int], **kwargs):
+def add_etch_pits(image: np.ndarray, seed: int, *, light_direction: List[int], num_range: List[int],
+                       size_range: List[int], color_range: List[int],
+                       shading_values: List[int],
+                       texture_density_range: List[float],
+                       texture_blur_range: List[float],
+                       texture_intensity_range: List[float],
+                       texture_size_range: List[int], **kwargs):
     rng = np.random.RandomState(seed)
-    num = rng.randint(*etch_pits_num_range)
-    dark_shadow, light_shadow, light = etch_pits_shading_values
+    num = rng.randint(*num_range)
+    dark_shadow, light_shadow, light = shading_values
     h, w = image.shape
 
     # padding so pits near the border don't leave artifact borders
-    pad = int(max(etch_pits_size_range))
+    pad = int(max(size_range))
     pad_image = cv2.copyMakeBorder(image, pad, pad, pad, pad, borderType=cv2.BORDER_REFLECT_101)
     pad_h, pad_w = pad_image.shape
 
     for _ in range(num):
         angle = rng.randint(0, 180)
-        size = generate_pit_size(rng, etch_pits_size_range)
-        base_color = rng.randint(*etch_pits_color_range)
+        size = generate_pit_size(rng, size_range)
+        base_color = rng.randint(*color_range)
         centers = generate_centers(rng, pad_w, pad_h, light_direction, size)
         colors = [light, dark_shadow, light_shadow, base_color]
 
-        texture_params = [light_direction, etch_pits_texture_density_range, etch_pits_texture_blur_range,
-                          etch_pits_texture_intensity_range, etch_pits_texture_size_range]
+        texture_params = [light_direction, texture_density_range, texture_blur_range,
+                          texture_intensity_range, texture_size_range]
 
         pad_image = add_colored_shapes(pad_image, rng, centers, size, angle, colors, texture_params)
 
@@ -69,8 +69,8 @@ def generate_centers(rng, w, h, light_dir, size):
     return centers
 
 
-def generate_pit_size(rng, etch_pits_size_range):
-    size_x = rng.randint(*etch_pits_size_range)
+def generate_pit_size(rng, size_range):
+    size_x = rng.randint(*size_range)
     size_y = max(3, size_x - rng.randint(size_x // 3, size_x // 2))
     return size_x, size_y
 
@@ -78,7 +78,7 @@ def generate_pit_size(rng, etch_pits_size_range):
 def add_colored_shapes(image, rng, centers, size, angle, colors, texture_params):
     temp_image = np.zeros_like(image, dtype=np.uint8)
 
-    scales = [1.0, 0.85, 0.78, 0.74]
+    scales = [1.0, 0.85, 0.76, 0.7]
     base_center = centers[0]
     base_contour = create_pit_shape(image, base_center, angle, size, scales[0], rng)
 

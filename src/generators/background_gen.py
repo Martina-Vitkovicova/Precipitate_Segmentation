@@ -17,18 +17,14 @@ from src.type_definitions import (Image, IndexedRegion, Vertices, Edge, Point, R
                                   GradientImage)
 
 
-# TODO check bool vs string types
 
-def voronoi_bg(seed: int, *, img_size: List[int], light_direction: List[int],voronoi_regions_num_range: List[int],
-               voronoi_color_range: List[int],
-               voronoi_border_width: int, voronoi_change_border_width: str, voronoi_border_jaggedness: float,
-               voronoi_border_noise: float, voronoi_border_3d: str,
-               voronoi_shading_color_range: List[int], voronoi_perlin_noise: str,
-               voronoi_perlin_noise_alpha_range: List[int], voronoi_perlin_noise_scale_range: List[int],
-               voronoi_gaussian_noise: str, voronoi_gaussian_noise_alpha_range: List[int],
-               voronoi_porous_texture: str, voronoi_porous_texture_density_range: List[float],
-               voronoi_porous_texture_blur_range: List[float], voronoi_porous_texture_intensity_range: List[float],
-               voronoi_porous_texture_size_range: List[float], **kwargs) -> Image:
+def voronoi_bg(seed: int, *, img_size: List[int], light_direction: List[int], regions_num_range: List[int],
+               color_range: List[int], border_width: int, change_border_width: bool, border_jaggedness: float,
+               border_noise: float, border_3d: bool, shading_color_range: List[int], perlin_noise: bool,
+               perlin_noise_alpha_range: List[int], perlin_noise_scale_range: List[int],
+               gaussian_noise: bool, gaussian_noise_alpha_range: List[int], porous_texture: bool,
+               porous_texture_density_range: List[float], porous_texture_blur_range: List[float],
+               porous_texture_intensity_range: List[float], porous_texture_size_range: List[int], **kwargs) -> Image:
     """
     Creates a background matrix image consisting of regions (grains) with borders.
 
@@ -38,21 +34,21 @@ def voronoi_bg(seed: int, *, img_size: List[int], light_direction: List[int],vor
         int number used for setting random generators.
     img_size:
         [width, height] dimensions of the generated image.
-    voronoi_regions_num_range:
+    regions_num_range:
         [min, max] number of base voronoi regions (the total region count may be a little different due to truncating
         and adding regions which were not closed before).
-    voronoi_color_range:
+    color_range:
         [darker, lighter] color range for the regions. Each region has individually generated colour.
-    voronoi_border_width:
+    border_width:
         int number for base width of the region borders. The borders are processed and widened, so this number is the
         minimum border width in the image.
-    voronoi_change_border_width:
-    voronoi_border_jaggedness:
-    voronoi_border_noise:
-    voronoi_border_3d:
+    change_border_width:
+    border_jaggedness:
+    border_noise:
+    border_3d:
     light_direction:
-    voronoi_shading_color_range:
-    voronoi_porous_texture:
+    shading_color_range:
+    porous_texture:
     kwargs:
         other parameters not used for the background generation.
 
@@ -70,37 +66,37 @@ def voronoi_bg(seed: int, *, img_size: List[int], light_direction: List[int],vor
     # image = np.zeros((height, width), dtype=np.float32)
     image = np.full((height, width), 140, dtype=np.float32)
 
-    num_points = rng.randint(*voronoi_regions_num_range)
+    num_points = rng.randint(*regions_num_range)
     region_generator_points = np.column_stack((rng.uniform(0, width, num_points),
                                                rng.uniform(0, height, num_points)))
     vor = scipy.spatial.Voronoi(region_generator_points)
     regions, vertices = get_finite_voronoi(vor)
 
-    modified_borders = distort_borders(regions, vertices, img_size, voronoi_border_jaggedness, voronoi_border_noise)
+    modified_borders = distort_borders(regions, vertices, img_size, border_jaggedness, border_noise)
     border_mask = np.zeros_like(image)
 
     for region in regions:
         y_coords, x_coords = get_distorted_region_coords(modified_borders, region)
         row, col = skdraw.polygon(y_coords, x_coords, shape=image.shape)
-        color = rng.randint(*voronoi_color_range)
+        color = rng.randint(*color_range)
         image[row, col] = color
 
-        if voronoi_perlin_noise == "True":
-            image = add_perlin_noise(image, perlin_rng, row, col, voronoi_perlin_noise_alpha_range,
-                                     voronoi_perlin_noise_scale_range)
-        if voronoi_gaussian_noise == "True":
-            image = add_gaussian_noise(image, gauss_rng, row, col, voronoi_gaussian_noise_alpha_range)
+        if perlin_noise:
+            image = add_perlin_noise(image, perlin_rng, row, col, perlin_noise_alpha_range,
+                                     perlin_noise_scale_range)
+        if gaussian_noise:
+            image = add_gaussian_noise(image, gauss_rng, row, col, gaussian_noise_alpha_range)
 
         perim_row, perim_col = skdraw.polygon_perimeter(y_coords, x_coords, shape=image.shape)
         border_mask[perim_row, perim_col] = 1
 
-    if voronoi_porous_texture == "True":
-        image = add_porous_texture(image, texture_rng, light_direction, voronoi_porous_texture_density_range,
-                                   voronoi_porous_texture_blur_range, voronoi_porous_texture_intensity_range,
-                                   voronoi_porous_texture_size_range)
+    if porous_texture:
+        image = add_porous_texture(image, texture_rng, light_direction, porous_texture_density_range,
+                                   porous_texture_blur_range, porous_texture_intensity_range,
+                                   porous_texture_size_range)
 
-    image = modify_borders(image, border_mask, voronoi_border_width, voronoi_change_border_width, borders_rng,
-                           130, voronoi_border_3d, light_direction, voronoi_shading_color_range)
+    image = modify_borders(image, border_mask, border_width, change_border_width, borders_rng,
+                           130, border_3d, light_direction, shading_color_range)
 
     return image
 
@@ -115,7 +111,7 @@ def generate_distant_points(rng, min_distance, width, height):
 
 
 def distort_borders(regions: List[IndexedRegion], vertices: Vertices, img_size: List[int],
-                    voronoi_border_jaggedness: float, voronoi_border_noise: float) -> Dict[Edge, Vertices]:
+                    border_jaggedness: float, border_noise: float) -> Dict[Edge, Vertices]:
     """ Transforms borders consisting of straight lines to jagged polylines. """
 
     modified_borders = {}
@@ -130,8 +126,8 @@ def distort_borders(regions: List[IndexedRegion], vertices: Vertices, img_size: 
                 edge_rng = np.random.RandomState(edge_seed)
                 v1, v2 = (tuple(int(point) for point in vertices[i])
                           for i in sorted_edge)
-                modified_borders[sorted_edge] = divide_edge(v1, v2, edge_rng, img_size, voronoi_border_jaggedness,
-                                                            voronoi_border_noise)
+                modified_borders[sorted_edge] = divide_edge(v1, v2, edge_rng, img_size, border_jaggedness,
+                                                            border_noise)
 
     return modified_borders
 
@@ -143,8 +139,8 @@ def get_edge_seed(edge: Edge) -> int:
     return int(hashlib.sha256(edge_bytes).hexdigest(), 16) % (2 ** 32)
 
 
-def divide_edge(start: Point, end: Point, rng: RandomState, img_size: List[int], voronoi_border_jaggedness: float,
-                voronoi_border_noise: float) -> Vertices:
+def divide_edge(start: Point, end: Point, rng: RandomState, img_size: List[int], border_jaggedness: float,
+                border_noise: float) -> Vertices:
     """ Divides a straight line given by start and end point to number of segments and adds noise to the coordinates
     to make the new line jagged. """
 
@@ -158,10 +154,10 @@ def divide_edge(start: Point, end: Point, rng: RandomState, img_size: List[int],
 
     line_length = np.linalg.norm(np.array(new_end) - np.array(new_start))
 
-    base_segments = max(1, int(np.sqrt(line_length) * voronoi_border_jaggedness))
+    base_segments = max(1, int(np.sqrt(line_length) * border_jaggedness))
     # changes in x, y coords to make the border jagged
-    if voronoi_border_noise > 0:
-        noise_level = max(2, min(30, int(np.sqrt(line_length) * voronoi_border_noise) + rng.randint(-2, 2)))
+    if border_noise > 0:
+        noise_level = max(2, min(30, int(np.sqrt(line_length) * border_noise) + rng.randint(-2, 2)))
     else:
         noise_level = 0
     # to how many segments will the line be divided
@@ -195,26 +191,26 @@ def get_distorted_region_coords(modified_borders: Dict[Edge, Vertices], region: 
     return np.array(y_coords).astype(int), np.array(x_coords).astype(int)
 
 
-def modify_borders(image: Image, border_mask: BorderMask, width: int, change_width: str,
-                   rng: RandomState, color: int, voronoi_border_3d: str, light_direction: List[int],
-                   voronoi_shading_color_range: List[int]) -> Image:
+def modify_borders(image: Image, border_mask: BorderMask, width: int, change_width: bool,
+                   rng: RandomState, color: int, border_3d: bool, light_direction: List[int],
+                   shading_color_range: List[int]) -> Image:
     """ Changes the border appearance - width and color. """
 
     border_mask = change_border_width(border_mask, rng, width, change_width)
 
-    if voronoi_border_3d == "False":
+    if not border_3d:
         new_image = image.copy()
         new_image[border_mask > 0] = color + rng.randint(-20, -19)
     else:
-        grad_shading = compute_3d_border_effect(border_mask, rng, light_direction, voronoi_shading_color_range)
+        grad_shading = compute_3d_border_effect(border_mask, rng, light_direction, shading_color_range)
         border_mask = skimage.morphology.dilation(border_mask, skimage.morphology.disk(width))
         new_image = blend_borders_w_bg(border_mask, image, grad_shading)
 
     return new_image
 
 
-def change_border_width(border_mask, rng: RandomState, width: int, change_width: str):
-    if change_width == "False":
+def change_border_width(border_mask, rng: RandomState, width: int, change_width: bool):
+    if not change_width:
         disk = skimage.morphology.disk(width)
         return skimage.morphology.dilation(border_mask, disk)
 
@@ -258,21 +254,8 @@ def generate_widths(length, rng: RandomState, num_control_points, min_width, max
     return widths
 
 
-def smooth_border_mask(border_mask: BorderMask):
-    # plt.imshow(border_mask, cmap="gray")
-    # plt.show()
-    border_mask = ndimage.gaussian_filter(border_mask, sigma=2)
-    # plt.imshow(border_mask, cmap="gray")
-    # plt.show()
-    border_mask = border_mask > 0.4
-    # plt.imshow(border_mask, cmap="gray")
-    # plt.show()
-
-    return border_mask.astype(np.int8)
-
-
 def compute_3d_border_effect(border_mask: BorderMask, rng: RandomState, light_direction: List[int],
-                             voronoi_shading_color_range: List[int]) -> GradientImage:
+                             shading_color_range: List[int]) -> GradientImage:
     """ Compute borders colors to make it look like 3D edges. """
 
     # todo do the 3d effect for the whole image at once?
@@ -296,7 +279,7 @@ def compute_3d_border_effect(border_mask: BorderMask, rng: RandomState, light_di
 
     gradient_shading = ndimage.gaussian_filter(gradient_shading, sigma=0.35)
 
-    lower, upper = [x + rng.randint(-5, 5) for x in voronoi_shading_color_range]
+    lower, upper = [x + rng.randint(-5, 5) for x in shading_color_range]
     gradient_shading = gradient_shading * (upper - lower) + lower
     # gradient_shading = ndimage.gaussian_filter(gradient_shading, sigma=1)
 
@@ -316,12 +299,12 @@ def blend_borders_w_bg(border_mask: BorderMask, image: Image, grad_shading: Grad
     return new_image
 
 
-def add_perlin_noise(image: Image, rng: RandomState, row: Coords, col: Coords, voronoi_perlin_noise: List[int],
-                     voronoi_perlin_noise_scale) -> Image:
+def add_perlin_noise(image: Image, rng: RandomState, row: Coords, col: Coords, perlin_noise: List[int],
+                     perlin_noise_scale) -> Image:
     """ Adds perlin noise the individual cells. """
     new_image = image.copy()
-    alpha = rng.randint(*voronoi_perlin_noise) / 100
-    divisor = rng.choice(voronoi_perlin_noise_scale)
+    alpha = rng.randint(*perlin_noise) / 100
+    divisor = rng.choice(perlin_noise_scale)
     res = (image.shape[0] // divisor, image.shape[1] // divisor)
 
     height, width = image.shape
@@ -334,10 +317,10 @@ def add_perlin_noise(image: Image, rng: RandomState, row: Coords, col: Coords, v
 
 
 def add_gaussian_noise(image: Image, rng: RandomState, row: Coords, col: Coords,
-                       voronoi_gaussian_noise: List[int]) -> Image:
+                       gaussian_noise: List[int]) -> Image:
     new_image = image.copy()
     noise = rng.normal(0, 1, (1025, 1025))
-    alpha = rng.randint(*voronoi_gaussian_noise) * 0.03
+    alpha = rng.randint(*gaussian_noise) * 0.03
     noise = noise - noise.mean()
     noise_amplitude = alpha * 127.5
     new_image[row, col] = image[row, col] + noise[row, col] * noise_amplitude
