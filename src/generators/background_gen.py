@@ -30,8 +30,8 @@ def voronoi_bg(vor_rng: RandomState, *, img_size: List[int], light_direction: Li
 
     Parameters
     ----------
-    seed:
-        int number used for setting random generators.
+    vor_rng:
+        voronoi root generator for setting other random generators.
     img_size:
         [width, height] dimensions of the generated image.
     regions_num_range:
