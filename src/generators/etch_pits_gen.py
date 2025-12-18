@@ -5,20 +5,20 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from src.generators.background_gen import add_porous_texture
+from src.type_definitions import RandomState
 
 
 # todo varied offsets x scales
 
 
-def add_etch_pits(image: np.ndarray, seed: int, *, light_direction: List[int], num_range: List[int],
+def add_etch_pits(image: np.ndarray, etch_pits_rng: RandomState, *, light_direction: List[int], num_range: List[int],
                        size_range: List[int], color_range: List[int],
                        shading_values: List[int],
                        texture_density_range: List[float],
                        texture_blur_range: List[float],
                        texture_intensity_range: List[float],
                        texture_size_range: List[int], **kwargs):
-    rng = np.random.RandomState(seed)
-    num = rng.randint(*num_range)
+    num = etch_pits_rng.randint(*num_range)
     dark_shadow, light_shadow, light = shading_values
     h, w = image.shape
 
@@ -28,16 +28,16 @@ def add_etch_pits(image: np.ndarray, seed: int, *, light_direction: List[int], n
     pad_h, pad_w = pad_image.shape
 
     for _ in range(num):
-        angle = rng.randint(0, 180)
-        size = generate_pit_size(rng, size_range)
-        base_color = rng.randint(*color_range)
-        centers = generate_centers(rng, pad_w, pad_h, light_direction, size)
+        angle = etch_pits_rng.randint(0, 180)
+        size = generate_pit_size(etch_pits_rng, size_range)
+        base_color = etch_pits_rng.randint(*color_range)
+        centers = generate_centers(etch_pits_rng, pad_w, pad_h, light_direction, size)
         colors = [light, dark_shadow, light_shadow, base_color]
 
         texture_params = [light_direction, texture_density_range, texture_blur_range,
                           texture_intensity_range, texture_size_range]
 
-        pad_image = add_colored_shapes(pad_image, rng, centers, size, angle, colors, texture_params)
+        pad_image = add_colored_shapes(pad_image, etch_pits_rng, centers, size, angle, colors, texture_params)
 
     # crop back to original size
     image = pad_image[pad:pad + h, pad:pad + w]

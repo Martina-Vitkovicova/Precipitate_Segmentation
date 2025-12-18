@@ -18,7 +18,7 @@ from src.type_definitions import (Image, IndexedRegion, Vertices, Edge, Point, R
 
 
 
-def voronoi_bg(seed: int, *, img_size: List[int], light_direction: List[int], regions_num_range: List[int],
+def voronoi_bg(vor_rng: RandomState, *, img_size: List[int], light_direction: List[int], regions_num_range: List[int],
                color_range: List[int], border_width: int, change_border_width: bool, border_jaggedness: float,
                border_noise: float, border_3d: bool, shading_color_range: List[int], perlin_noise: bool,
                perlin_noise_alpha_range: List[int], perlin_noise_scale_range: List[int],
@@ -56,19 +56,15 @@ def voronoi_bg(seed: int, *, img_size: List[int], light_direction: List[int], re
     -------
     Numpy 2D ndarray image.
     """
-    rng = np.random.RandomState(seed)
-    perlin_rng = np.random.RandomState(seed + 1)
-    borders_rng = np.random.RandomState(seed + 2)
-    gauss_rng = np.random.RandomState(seed + 3)
-    texture_rng = np.random.RandomState(seed + 4)
+    perlin_rng, borders_rng, gauss_rng, texture_rng = split_random_state(vor_rng, 4)
 
     width, height = img_size
     # image = np.zeros((height, width), dtype=np.float32)
     image = np.full((height, width), 140, dtype=np.float32)
 
-    num_points = rng.randint(*regions_num_range)
-    region_generator_points = np.column_stack((rng.uniform(0, width, num_points),
-                                               rng.uniform(0, height, num_points)))
+    num_points = vor_rng.randint(*regions_num_range)
+    region_generator_points = np.column_stack((vor_rng.uniform(0, width, num_points),
+                                               vor_rng.uniform(0, height, num_points)))
     vor = scipy.spatial.Voronoi(region_generator_points)
     regions, vertices = get_finite_voronoi(vor)
 
@@ -78,7 +74,7 @@ def voronoi_bg(seed: int, *, img_size: List[int], light_direction: List[int], re
     for region in regions:
         y_coords, x_coords = get_distorted_region_coords(modified_borders, region)
         row, col = skdraw.polygon(y_coords, x_coords, shape=image.shape)
-        color = rng.randint(*color_range)
+        color = vor_rng.randint(*color_range)
         image[row, col] = color
 
         if perlin_noise:
@@ -99,6 +95,10 @@ def voronoi_bg(seed: int, *, img_size: List[int], light_direction: List[int], re
                            130, border_3d, light_direction, shading_color_range)
 
     return image
+
+
+def split_random_state(parent_rng, num):
+    return [np.random.RandomState(parent_rng.randint(0, 10**9)) for _ in range(num)]
 
 
 def generate_distant_points(rng, min_distance, width, height):

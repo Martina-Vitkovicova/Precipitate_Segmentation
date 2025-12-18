@@ -9,23 +9,22 @@ from scipy.interpolate import splprep, splev
 from src.type_definitions import Image, Color, Point, RandomState, Mask, Contour, Coords
 
 
-def add_precipitates(image: Image, seed: int, *, light_direction: List[int], color_range: Color,
+def add_precipitates(image: Image, precip_rng: RandomState, *, light_direction: List[int], color_range: Color,
                      num_range: List[int],
                      size_range: List[int], size_distribution: List[int],
                      shading_color_range: List[int], **kwargs) \
         -> Tuple[Image, Mask]:
-    rng = np.random.RandomState(seed)
-    emboss_rng = np.random.RandomState(seed+1)
+    emboss_rng = np.random.RandomState(precip_rng.randint(0, 10**9))
     mask = np.zeros(image.shape)
-    precip_num = rng.randint(*num_range)
+    precip_num = precip_rng.randint(*num_range)
     mask_color = (255, 255, 255)
 
     for _ in range(precip_num):
         temp_mask = np.zeros_like(image)
-        radius = generate_precip_size(rng, size_range, size_distribution)
-        contour = generate_precipitate_contour(image, radius, rng)
+        radius = generate_precip_size(precip_rng, size_range, size_distribution)
+        contour = generate_precipitate_contour(image, radius, precip_rng)
 
-        color = rng.randint(*color_range)
+        color = precip_rng.randint(*color_range)
         cv2.fillPoly(image, [contour], color)
         cv2.fillPoly(mask, [contour], mask_color)
         cv2.fillPoly(temp_mask, [contour], mask_color)

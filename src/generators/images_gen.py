@@ -14,25 +14,21 @@ from src.type_definitions import Image, RandomState
 
 
 def generate_image(root_seed, img_params_path):
-    rng = np.random.RandomState(root_seed)
-    vor_seed = rng.randint(0, 10 ** 5)
-    precip_seed = rng.randint(0, 10 ** 5)
-    etch_pits_seed = rng.randint(0, 10 ** 5)
-    illumination_rng = np.random.RandomState(rng.randint(0, 10 ** 5))
-    corner_blur_rng = np.random.RandomState(rng.randint(0, 10 ** 5))
-    bottom_blur_rng = np.random.RandomState(rng.randint(0, 10 ** 5))
+    root_rng = np.random.RandomState(root_seed)
+    vor_rng, etch_pits_rng, precip_rng, corner_blur_rng, bottom_blur_rng, illum_rng, gauss_rng = (
+        split_random_state(root_rng, 7))
 
     with open(img_params_path, "r") as file:
         img_params = json.load(file)
 
     light_direction = img_params.get("light_direction")
     img_size = img_params.get("img_size")
-    background = voronoi_bg(vor_seed, img_size=img_size, light_direction=light_direction,
+    background = voronoi_bg(vor_rng, img_size=img_size, light_direction=light_direction,
                             **get_subparams(img_params, "voronoi_"))
 
-    image = add_etch_pits(background, etch_pits_seed, light_direction=light_direction,
+    image = add_etch_pits(background, etch_pits_rng, light_direction=light_direction,
                           **get_subparams(img_params, "etch_pits_"))
-    image, mask = add_precipitates(image, precip_seed, light_direction=light_direction,
+    image, mask = add_precipitates(image, precip_rng, light_direction=light_direction,
                                    **get_subparams(img_params, "precipitate_"))
 
     if img_params.get("corner_blur"):
@@ -42,11 +38,15 @@ def generate_image(root_seed, img_params_path):
         image = add_bottom_blur(image, bottom_blur_rng, **get_subparams(img_params, "bottom_blur_"))
 
     if img_params.get("img_illumination_gradient"):
-        image = add_illumination_gradient(image, illumination_rng,
+        image = add_illumination_gradient(image, illum_rng,
                                           **get_subparams(img_params, "img_illumination_gradient_"))
-    image = add_gaussian_noise(image, rng)
+    image = add_gaussian_noise(image, gauss_rng)
 
     return image, mask
+
+
+def split_random_state(parent_rng, num):
+    return [np.random.RandomState(parent_rng.randint(0, 10**9)) for _ in range(num)]
 
 
 def get_subparams(params: dict, prefix: str) -> dict:
