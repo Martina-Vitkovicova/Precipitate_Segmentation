@@ -7,16 +7,10 @@ from sklearn.cluster import KMeans
 from sklearn.metrics import silhouette_score
 from scipy.stats import f_oneway
 import matplotlib.colors as mcolors
-import matplotlib as mpl
 
 from src.image_analysis.matrix_analysis import matrix_stats_per_image
+from src.image_analysis.plotting_helper import apply_paper_style
 
-cl0_path = pathlib.Path(r"C:\Users\vitko\Desktop\CVR\Data\labeled_new_divided_me\cluster_0")
-cl1_path = pathlib.Path(r"C:\Users\vitko\Desktop\CVR\Data\labeled_new_divided_me\cluster_1")
-cl2_path = pathlib.Path(r"C:\Users\vitko\Desktop\CVR\Data\labeled_new_divided_me\cluster_2")
-cl3_path = pathlib.Path(r"C:\Users\vitko\Desktop\CVR\Data\labeled_new_divided_me\cluster_3")
-cl4_path = pathlib.Path(r"C:\Users\vitko\Desktop\CVR\Data\labeled_new_divided_me\cluster_4")
-cluster_dirs = {0: cl0_path, 1: cl1_path, 2: cl2_path, 3: cl3_path, 4: cl4_path}
 
 FEATURES = ["mean", "std", "p5", "p95", "local_std_std", "grad_energy"]
 
@@ -125,26 +119,6 @@ def loaded_clustering_stats(fin_root: pathlib.Path, standardize: bool = True):
     return stats_df
 
 
-def apply_paper_style():
-    mpl.rcParams.update({
-        "font.family": "serif",
-        "font.serif": ["Latin Modern Roman"],
-        "axes.titlesize": 15,
-        "axes.labelsize": 13,
-        "xtick.labelsize": 11,
-        "ytick.labelsize": 11,
-        "axes.facecolor": "#ECECF4",
-        "figure.facecolor": "white",
-        "axes.edgecolor": "black",
-        "axes.linewidth": 1.4,
-        "axes.grid": True,
-        "axes.axisbelow": True,
-        "grid.color": "#BEBEBE",
-        "grid.linewidth": 1.6,
-        "grid.alpha": 0.4,
-    })
-
-
 def plot_clusters_mean_p95(stats_df: pd.DataFrame, out_pdf: str | None = "cluster_mean_vs_p95.pdf"):
     apply_paper_style()
 
@@ -178,7 +152,7 @@ def plot_clusters_mean_p95(stats_df: pd.DataFrame, out_pdf: str | None = "cluste
 
 if __name__ == "__main__":
     LABELED_DIR = pathlib.Path(r"C:\Users\vitko\Desktop\CVR\Data\labeled_new")
-    STATS_CSV = pathlib.Path(r"C:\Users\vitko\Desktop\CVR\Baseline\src\image_analysis\matrix_stats_per_image.csv")
+    STATS_CSV = pathlib.Path(r"/src/image_analysis/matrix_stats/matrix_stats_per_image.csv")
 
     stats_df = compute_or_load_stats(LABELED_DIR, STATS_CSV)
     feature_columns = get_feature_columns(stats_df)

@@ -3,7 +3,7 @@ import cv2
 import numpy as np
 import pandas as pd
 
-from src.image_analysis.image_mask_loading import load_img_and_mask, iter_imgs_and_masks
+from src.image_analysis.image_mask_loading import iter_imgs_and_masks
 
 
 def get_avg_matrix_color(root_path):
@@ -74,14 +74,9 @@ def get_grad_energy(img: np.ndarray, mask: np.ndarray, ksize: int = 3) -> float:
 
 
 def matrix_stats_per_image(root_path: pathlib.Path, save_csv_path: pathlib.Path | None = None):
-    img_paths = sorted(root_path.rglob('img.png'))
     out = []
 
-    for img_path in img_paths:
-        img, mask = load_img_and_mask(img_path)
-        if img is None:
-            continue
-
+    for img, mask, img_path, _ in iter_imgs_and_masks(root_path, with_paths=True):
         bg = img[mask == 0].astype(np.float32)
         if bg.size == 0:
             continue
