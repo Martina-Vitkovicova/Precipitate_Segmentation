@@ -83,7 +83,7 @@ def add_colored_shapes(image, rng, centers, size, angle, colors, texture_params)
     base_contour = create_pit_shape(image, base_center, angle, size, scales[0], rng)
 
     for center, color, scale in zip(centers, colors, scales):
-        scaled_contour = scale_contour(base_contour, scale)
+        scaled_contour = scale_contour(base_contour, scale, center)
         dx = center[0] - base_center[0]
         dy = center[1] - base_center[1]
         moved_contour = translate_contour(scaled_contour, (dx, dy))
@@ -147,14 +147,11 @@ def generate_smooth_noise(contour, center, rng, max_noise, smoothing):
     return radial_displacement.astype(np.int32)
 
 
-def scale_contour(contour, scale_factor):
-    moments = cv2.moments(contour)
-    centroid_x = moments['m10'] / (moments['m00'] + 1e-6)
-    centroid_y = moments['m01'] / (moments['m00'] + 1e-6)
-
-    centered = contour - [centroid_x, centroid_y]
+def scale_contour(contour, scale_factor, center):
+    center_x, center_y = center
+    centered = contour - [center_x, center_y]
     scaled = centered * scale_factor
-    scaled = (scaled + [centroid_x, centroid_y]).astype(np.int32)
+    scaled = (scaled + [center_x, center_y]).astype(np.int32)
 
     return scaled
 

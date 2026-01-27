@@ -11,8 +11,8 @@ from src.type_definitions import Image, Color, Point, RandomState, Mask, Contour
 
 def add_precipitates(image: Image, precip_rng: RandomState, *, light_direction: List[int], color_range: Color,
                      num_range: List[int],
-                     size_range: List[int], size_distribution: List[int],
-                     shading_color_range: List[int], **kwargs) \
+                     size_range: List[int], size_distribution: List[int], emboss: bool,
+                     emboss_color_range: List[int], **kwargs) \
         -> Tuple[Image, Mask]:
     emboss_rng = np.random.RandomState(precip_rng.randint(0, 10**9))
     mask = np.zeros(image.shape)
@@ -29,8 +29,8 @@ def add_precipitates(image: Image, precip_rng: RandomState, *, light_direction: 
         cv2.fillPoly(mask, [contour], mask_color)
         cv2.fillPoly(temp_mask, [contour], mask_color)
 
-        image = add_individual_emboss(temp_mask, image, radius, emboss_rng, shading_color_range,
-                                      light_direction)
+        if emboss:
+            image = add_individual_emboss(temp_mask, image, radius, emboss_rng, emboss_color_range, light_direction)
         image = add_feather_effect(image, temp_mask, radius)
 
     return image, mask
@@ -89,40 +89,42 @@ def compute_emboss_size(radius: int, rng: RandomState) -> int:
 
 
 def add_individual_emboss(temp_mask: Mask, image: Image, radius: int, rng: RandomState,
-                          shading_color_range: List[int], light_direction: List[int]) -> Image:
+                          emboss_color_range: List[int], light_direction: List[int]) -> Image:
     effect_size = compute_emboss_size(radius, rng)
-    shading = compute_gradient_shading(temp_mask, effect_size, light_direction)
-    shading_mask = create_shading_mask(temp_mask, effect_size)
+    emboss = compute_gradient_emboss(temp_mask, effect_size, light_direction)
+    emboss_mask = create_emboss_mask(temp_mask, effect_size)
 
     blur_size = int(effect_size * 0.6) | 1
-    blurred_rim = cv2.GaussianBlur(shading_mask.astype(float), (blur_size, blur_size), sigmaX=0)
+    blurred_rim = cv2.GaussianBlur(emboss_mask.astype(float), (blur_size, blur_size), sigmaX=0)
 
-    # nullify shading outside the rim
-    shading *= blurred_rim
-    shading = cv2.GaussianBlur(shading.astype(float), (blur_size // 4 | 1, blur_size // 4 | 1), sigmaX=0)
+    # nullify emboss outside the rim
+    emboss *= blurred_rim
+    emboss = cv2.GaussianBlur(emboss.astype(float), (blur_size // 4 | 1, blur_size // 4 | 1), sigmaX=0)
 
-    shading_low = min(max(shading_color_range[0] + rng.randint(-10, 10), 0), 255)
-    shading_high = min(max(shading_color_range[1] + rng.randint(-10, 10), 0), 255)
-    shading_rescaled = adjust_image_value_range(shading, shading_low, shading_high)
+    emboss_low = min(max(emboss_color_range[0] + rng.randint(-10, 10), 0), 255)
+    emboss_high = min(max(emboss_color_range[1] + rng.randint(-10, 10), 0), 255)
+    emboss_rescaled = adjust_image_value_range(emboss, emboss_low, emboss_high)
 
     alpha = adjust_image_value_range(blurred_rim, 0, 1)
 
     temp_mask = temp_mask.astype(bool)
-    image[temp_mask] = (alpha[temp_mask] * shading_rescaled[temp_mask] + (1 - alpha[temp_mask]) * image[temp_mask])
+    image[temp_mask] = (alpha[temp_mask] * emboss_rescaled[temp_mask] + (1 - alpha[temp_mask]) * image[temp_mask])
 
     # add some noise to brake uniformity
     rim = np.clip(blurred_rim, 0.0, 1.0).astype(np.float32)
     rim = cv2.dilate(rim, np.ones((blur_size, blur_size), np.float32), iterations=1)
     noise = np.random.normal(0, 7, image.shape).astype(np.float32)
+    noise = cv2.GaussianBlur(noise, (3, 3), 0)
     image = image.astype(np.float32)
     image += rim * noise
+    image = np.clip(image, 0, 255)
 
     return image
 
 
-def compute_gradient_shading(temp_mask: Mask, size: int, light_direction: List[int]) -> Image:
+def compute_gradient_emboss(temp_mask: Mask, size: int, light_direction: List[int]) -> Image:
     # need to make the mask smaller since the gradient is computed around the border
-    erosion = max(1, int(size / 2))
+    erosion = max(1, int(size * 0.4))
     temp_mask = cv2.erode(temp_mask, np.ones((erosion, erosion), np.uint8), iterations=1)
 
     light_dir = np.array(light_direction, dtype=np.float32)
@@ -133,22 +135,22 @@ def compute_gradient_shading(temp_mask: Mask, size: int, light_direction: List[i
     depth = 20
     unit_normals = get_unit_normals(temp_mask, size, depth)
 
-    shading = np.tensordot(light_dir, unit_normals, axes=(0, 0))  # [-1, 1]
+    emboss = np.tensordot(light_dir, unit_normals, axes=(0, 0))  # [-1, 1]
     # rescale the range to get dark shadows
-    shading = (1 + shading) * 0.65 - 0.3  # (1 + shading) -> [0, 2], *0.65 -> [0, 1.3], -0.3 -> [-0.3, 1.0]
+    emboss = (1 + emboss) * 0.65 - 0.3  # (1 + emboss) -> [0, 2], *0.65 -> [0, 1.3], -0.3 -> [-0.3, 1.0]
 
-    return shading
+    return emboss
 
 
-def create_shading_mask(temp_mask: Mask, size: int) -> Mask:
+def create_emboss_mask(temp_mask: Mask, size: int) -> Mask:
     erosion = max(1, int(size / 2))
     temp_mask = cv2.erode(temp_mask, np.ones((erosion, erosion), np.uint8), iterations=1)
 
     band_size = max(1, size // 2) | 1
     struct_elem = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (band_size, band_size))
-    shading_mask = cv2.morphologyEx(temp_mask, cv2.MORPH_GRADIENT, struct_elem).astype(bool)
+    emboss_mask = cv2.morphologyEx(temp_mask, cv2.MORPH_GRADIENT, struct_elem).astype(bool)
 
-    return shading_mask
+    return emboss_mask
 
 
 def get_unit_normals(temp_mask: Mask, size: int, depth: int) -> NDArray[np.float32]:

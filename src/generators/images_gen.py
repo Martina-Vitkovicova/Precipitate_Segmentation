@@ -31,11 +31,11 @@ def generate_image(root_seed, img_params_path):
     image, mask = add_precipitates(image, precip_rng, light_direction=light_direction,
                                    **get_subparams(img_params, "precipitate_"))
 
-    if img_params.get("corner_blur"):
-        image = add_corner_blur(image, corner_blur_rng, **get_subparams(img_params, "corner_blur_"))
+    if img_params.get("img_corner_blur"):
+        image = add_corner_blur(image, corner_blur_rng, **get_subparams(img_params, "img_corner_blur_"))
 
-    if img_params.get("bottom_blur"):
-        image = add_bottom_blur(image, bottom_blur_rng, **get_subparams(img_params, "bottom_blur_"))
+    if img_params.get("img_bottom_blur"):
+        image = add_bottom_blur(image, bottom_blur_rng, **get_subparams(img_params, "img_bottom_blur_"))
 
     if img_params.get("img_illumination_gradient"):
         image = add_illumination_gradient(image, illum_rng,
