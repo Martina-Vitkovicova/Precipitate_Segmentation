@@ -1,12 +1,11 @@
 from pathlib import Path
-
 import numpy as np
 
 from generators.images_gen import generate_image, save_images
 from src.image_visualization import show_image_mask
 
 GENERATION = "cl4"
-IMG_PARAMS_PATH = "../config/img_params_cl4.json"
+IMG_PARAMS_PATH = "../config/img_params.json"
 IMG_SAVE_PATH = "../../Data/gen"
 
 
@@ -27,7 +26,7 @@ def _read_seeds_file(path, limit=None):
 
 def generate(num=1, gen=1, img_params_path="../config/img_params.json", img_save_path="../../Data/gen",
              show=True, save=True, seed=22, seeds_path="seeds.txt"):
-    img_save_path = f"{img_save_path}_{gen}"
+    img_save_path = Path(f"{img_save_path}_{gen}")
 
     if seed is not None:  # seed available
         if num == 1:

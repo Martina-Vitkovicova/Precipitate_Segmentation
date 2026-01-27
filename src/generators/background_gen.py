@@ -17,7 +17,6 @@ from src.type_definitions import (Image, IndexedRegion, Vertices, Edge, Point, R
                                   GradientImage)
 
 
-
 def voronoi_bg(vor_rng: RandomState, *, img_size: List[int], light_direction: List[int], regions_num_range: List[int],
                color_range: List[int], border_width: int, change_border_width: bool, border_jaggedness: float,
                border_noise: float, border_3d: bool, shading_color_range: List[int], perlin_noise: bool,
