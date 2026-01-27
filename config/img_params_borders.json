@@ -1,0 +1,17 @@
+{
+  "img_size": [1024, 1024],
+  "precipitate_num_range": [3, 5],
+  "precipitate_color_range": [15, 35],
+  "precipitate_size_range": [10, 30],
+  "precipitate_size_distribution": [4, 3, 2],
+  "precipitate_shading_color_range": [40, 240],
+  "voronoi_regions_num_range": [4, 8],
+  "voronoi_color_range": [140, 170],
+  "voronoi_border_width": 2,
+  "voronoi_border_jaggedness": 0.4,
+  "voronoi_border_noise": 0.5,
+  "voronoi_border_3d": "True",
+  "voronoi_light_direction": [-1, -2, 4],
+  "voronoi_shading_color_range": [60, 190],
+  "voronoi_perlin_noise": [5, 15]
+}
