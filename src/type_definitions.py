@@ -39,7 +39,6 @@ AllRidges: TypeAlias = Dict[int, List[VoronoiRidge]]
 FloatPoint: TypeAlias = NDArray[np.float64]
 
 # Three ints for grayscale color
-# Todo Should change to float
 Color: TypeAlias = List[int]
 
 # Binary mask with precipitates
@@ -48,4 +47,7 @@ Mask: TypeAlias = NDArray[np.float32]
 # NDArray of shape (num_spline_points, 1, 2) used by cv2 to fill contours
 Contour: TypeAlias = NDArray[np.int32]
 
-#
+IntRange = Tuple[int, int]
+FloatRange = Tuple[float, float]
+IntPair = Tuple[int, int]
+Vec3i = Tuple[int, int, int]

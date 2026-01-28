@@ -7,7 +7,8 @@ import cv2
 import numpy as np
 from matplotlib import pyplot as plt
 
-from src.generators.background_gen import voronoi_bg
+from src.config_parsing import GeneratorConfig
+from src.generators.background_gen import generate_matrix
 from src.generators.etch_pits_gen import add_etch_pits
 from src.generators.precipitates_gen import add_precipitates
 from src.type_definitions import Image, RandomState
@@ -19,27 +20,29 @@ def generate_image(root_seed, img_params_path):
         split_random_state(root_rng, 7))
 
     with open(img_params_path, "r") as file:
-        img_params = json.load(file)
+        raw_params = json.load(file)
 
-    light_direction = img_params.get("light_direction")
-    img_size = img_params.get("img_size")
-    background = voronoi_bg(vor_rng, img_size=img_size, light_direction=light_direction,
-                            **get_subparams(img_params, "voronoi_"))
+    img_params = GeneratorConfig.from_dict(raw_params)
 
-    image = add_etch_pits(background, etch_pits_rng, light_direction=light_direction,
-                          **get_subparams(img_params, "etch_pits_"))
-    image, mask = add_precipitates(image, precip_rng, light_direction=light_direction,
-                                   **get_subparams(img_params, "precipitate_"))
+    matrix = generate_matrix(vor_rng, img_params.general, img_params.matrix)
 
-    if img_params.get("img_corner_blur"):
-        image = add_corner_blur(image, corner_blur_rng, **get_subparams(img_params, "img_corner_blur_"))
+    image = add_etch_pits(matrix, etch_pits_rng, img_params.general, img_params.etch_pits)
 
-    if img_params.get("img_bottom_blur"):
-        image = add_bottom_blur(image, bottom_blur_rng, **get_subparams(img_params, "img_bottom_blur_"))
+    image, mask = add_precipitates(image, precip_rng, img_params.general, img_params.precipitates)
 
-    if img_params.get("img_illumination_gradient"):
-        image = add_illumination_gradient(image, illum_rng,
-                                          **get_subparams(img_params, "img_illumination_gradient_"))
+    effects = img_params.effects
+    if effects.corner_blur_enabled:
+        image = add_corner_blur(image, corner_blur_rng, radius_range=list(effects.corner_blur_radius_range),
+                                kernel_size_range=list(effects.corner_blur_kernel_size_range),)
+
+    if effects.bottom_blur_enabled:
+        image = add_bottom_blur(image, bottom_blur_rng, height_range=list(effects.bottom_blur_height_range),
+                                kernel_size_range=list(effects.bottom_blur_kernel_size_range),)
+
+    if effects.illumination_gradient_enabled:
+        image = add_illumination_gradient(image, illum_rng, strength_range=list(effects.illumination_gradient_strength_range),
+                                          angle_range=list(effects.illumination_gradient_angle_range),)
+
     image = add_gaussian_noise(image, gauss_rng)
 
     return image, mask
@@ -47,14 +50,6 @@ def generate_image(root_seed, img_params_path):
 
 def split_random_state(parent_rng, num):
     return [np.random.RandomState(parent_rng.randint(0, 10**9)) for _ in range(num)]
-
-
-def get_subparams(params: dict, prefix: str) -> dict:
-    out = {}
-    for key, value in params.items():
-        if key.startswith(prefix):
-            out[key[len(prefix):]] = value
-    return out
 
 
 def save_images(root_path, seed, img, mask, img_params_path=None, gen=1):

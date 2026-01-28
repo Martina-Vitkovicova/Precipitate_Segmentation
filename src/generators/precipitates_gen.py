@@ -6,31 +6,30 @@ import numpy as np
 from numpy.typing import NDArray
 from scipy.interpolate import splprep, splev
 
+from src.config_parsing import GeneralParams, PrecipitatesParams
 from src.type_definitions import Image, Color, Point, RandomState, Mask, Contour, Coords
 
 
-def add_precipitates(image: Image, precip_rng: RandomState, *, light_direction: List[int], color_range: Color,
-                     num_range: List[int],
-                     size_range: List[int], size_distribution: List[int], emboss: bool,
-                     emboss_color_range: List[int], **kwargs) \
-        -> Tuple[Image, Mask]:
-    emboss_rng = np.random.RandomState(precip_rng.randint(0, 10**9))
+def add_precipitates(image: Image, precip_rng: RandomState, general_params: GeneralParams,
+                     params: PrecipitatesParams) -> Tuple[Image, Mask]:
+    emboss_rng = np.random.RandomState(precip_rng.randint(0, 10 ** 9))
     mask = np.zeros(image.shape)
-    precip_num = precip_rng.randint(*num_range)
+    precip_num = precip_rng.randint(*params.num_range)
     mask_color = (255, 255, 255)
 
     for _ in range(precip_num):
         temp_mask = np.zeros_like(image)
-        radius = generate_precip_size(precip_rng, size_range, size_distribution)
+        radius = generate_precip_size(precip_rng, params.size_range, params.size_distribution)
         contour = generate_precipitate_contour(image, radius, precip_rng)
 
-        color = precip_rng.randint(*color_range)
+        color = precip_rng.randint(*params.intensity_range)
         cv2.fillPoly(image, [contour], color)
         cv2.fillPoly(mask, [contour], mask_color)
         cv2.fillPoly(temp_mask, [contour], mask_color)
 
-        if emboss:
-            image = add_individual_emboss(temp_mask, image, radius, emboss_rng, emboss_color_range, light_direction)
+        if params.emboss_enabled:
+            image = add_individual_emboss(temp_mask, image, radius, emboss_rng, params.emboss_intensity_range,
+                                          general_params.light_direction)
         image = add_feather_effect(image, temp_mask, radius)
 
     return image, mask
@@ -54,7 +53,7 @@ def generate_precipitate_contour(image: Image, radius: int, rng: RandomState) ->
     # parametric spline with periodic boundary conditions
     spline_degree = 3
     num_spline_points = 1000
-    tck, u, *_ = splprep([x, y], s=radius*0.1, per=True, k=min(spline_degree, len(x) - 1))
+    tck, u, *_ = splprep([x, y], s=radius * 0.1, per=True, k=min(spline_degree, len(x) - 1))
 
     u_fine = np.linspace(0, 1, num_spline_points)
     x_smooth, y_smooth = splev(u_fine, tck)

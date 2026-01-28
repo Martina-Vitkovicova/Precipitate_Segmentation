@@ -1,43 +1,36 @@
-import os
-from typing import List
+from typing import List, Tuple
 import cv2
-import matplotlib.pyplot as plt
 import numpy as np
 
+from src.config_parsing import GeneralParams, EtchPitsParams, TextureParams
 from src.generators.background_gen import add_porous_texture
-from src.type_definitions import RandomState
+from src.type_definitions import RandomState, Image
 
 
-# todo varied offsets x scales
-
-
-def add_etch_pits(image: np.ndarray, etch_pits_rng: RandomState, *, light_direction: List[int], num_range: List[int],
-                       size_range: List[int], color_range: List[int],
-                       shading_values: List[int],
-                       texture_density_range: List[float],
-                       texture_blur_range: List[float],
-                       texture_intensity_range: List[float],
-                       texture_size_range: List[int], **kwargs):
-    num = etch_pits_rng.randint(*num_range)
-    dark_shadow, light_shadow, light = shading_values
+def add_etch_pits(image: Image, etch_pits_rng: RandomState, general_params: GeneralParams,
+                  params: EtchPitsParams) -> Image:
+    num = etch_pits_rng.randint(*params.num_range)
+    dark_shadow, light_shadow, highlight = (params.shading_dark_shadow, params.shading_light_shadow,
+                                            params.shading_highlight)
     h, w = image.shape
 
     # padding so pits near the border don't leave artifact borders
-    pad = int(max(size_range))
+    pad = int(max(params.size_range))
     pad_image = cv2.copyMakeBorder(image, pad, pad, pad, pad, borderType=cv2.BORDER_REFLECT_101)
     pad_h, pad_w = pad_image.shape
 
+    texture_params = TextureParams(params.texture_density_range, params.texture_blur_range,
+                                   params.texture_intensity_range, params.texture_size_range)
+
     for _ in range(num):
         angle = etch_pits_rng.randint(0, 180)
-        size = generate_pit_size(etch_pits_rng, size_range)
-        base_color = etch_pits_rng.randint(*color_range)
-        centers = generate_centers(etch_pits_rng, pad_w, pad_h, light_direction, size)
-        colors = [light, dark_shadow, light_shadow, base_color]
+        size = generate_pit_size(etch_pits_rng, params.size_range)
+        base_color = etch_pits_rng.randint(*params.intensity_range)
+        centers = generate_centers(etch_pits_rng, pad_w, pad_h, general_params.light_direction, size)
+        colors = [highlight, dark_shadow, light_shadow, base_color]
 
-        texture_params = [light_direction, texture_density_range, texture_blur_range,
-                          texture_intensity_range, texture_size_range]
-
-        pad_image = add_colored_shapes(pad_image, etch_pits_rng, centers, size, angle, colors, texture_params)
+        pad_image = add_colored_shapes(pad_image, etch_pits_rng, centers, size, angle, colors,
+                                       general_params.light_direction, texture_params)
 
     # crop back to original size
     image = pad_image[pad:pad + h, pad:pad + w]
@@ -75,7 +68,7 @@ def generate_pit_size(rng, size_range):
     return size_x, size_y
 
 
-def add_colored_shapes(image, rng, centers, size, angle, colors, texture_params):
+def add_colored_shapes(image, rng, centers, size, angle, colors, light_dir, texture_params):
     temp_image = np.zeros_like(image, dtype=np.uint8)
 
     scales = [1.0, 0.85, 0.76, 0.7]
@@ -96,7 +89,7 @@ def add_colored_shapes(image, rng, centers, size, angle, colors, texture_params)
     blurred = cv2.GaussianBlur(temp_image, (blur_size, blur_size), sigmaX=0)
 
     mask = (temp_image > 0).astype(np.uint8)
-    blurred_w_texture = add_texture(blurred, mask, rng, texture_params)
+    blurred_w_texture = add_texture(blurred, mask, rng, light_dir, texture_params)
     result = merge_pit_into_image(image, blurred_w_texture, mask, size)
 
     return result
@@ -137,11 +130,6 @@ def generate_smooth_noise(contour, center, rng, max_noise, smoothing):
     noise = np.concatenate([core_noise, transition]).astype(np.float32)
 
     noise_smooth = cv2.GaussianBlur(noise, (0, 0), sigmaX=smoothing)
-    # check amplitude that had been reduced with smoothing
-    # std = noise_smooth.std() + 1e-6
-    # noise_smooth = noise_smooth * (max_noise / std)
-    # noise_smooth = np.clip(noise_smooth, -max_noise, max_noise)
-
     radial_displacement = radial_dir * noise_smooth.reshape(n, 1)
 
     return radial_displacement.astype(np.int32)
@@ -162,11 +150,11 @@ def translate_contour(contour, delta):
     return translated.astype(np.int32)
 
 
-def add_texture(blurred, mask, rng, texture_params):
+def add_texture(blurred, mask, rng, light_dir, texture_params):
     result = blurred.astype(np.float32)
     temp_texture = np.zeros(mask.shape, dtype=np.float32)
 
-    temp_texture = add_porous_texture(temp_texture, rng, *texture_params)
+    temp_texture = add_porous_texture(temp_texture, rng, light_dir, texture_params)
 
     mask = mask.astype(bool)
     result[mask] = np.clip(blurred[mask] + 0.4 * temp_texture[mask], 0, 255)
@@ -186,7 +174,6 @@ def merge_pit_into_image(image, pit, mask, size):
 
     img_f = image.astype(np.float32)
     pit_f = pit.astype(np.float32)
-    hf_sigma = 2,
     hf_strength = 0.35
 
     low = cv2.GaussianBlur(img_f, (0, 0), 2)
