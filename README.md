@@ -12,7 +12,7 @@ on neural network training.
 Image generation is controlled via a JSON configuration file. The main configurable components are:
 
 ### Matrix and Grain Structure
-Represents the metal matrix forming the image background, subdivided into grains with visible boundaries and texture variations.
+Represents the polycrystalline metal matrix forming the image background, subdivided into grains with visible boundaries and texture variations.
 - Voronoi-based grain partitioning
 - Configurable number and size of grains
 - Configurable grain boundary width, jaggedness, noise and shading
@@ -66,7 +66,7 @@ Dataset generation is performed by running `main.py` as a module from the projec
 A minimal example that generates one image-mask pair, displays it and then saves it to disk with metadata:
 
 ```bash
-python -m src.main --num 1 --gen experiment1 --config config/img_params.json --save --show
+python -m src.main --num 1 --gen experiment1 --config config/img_params_new.json --save --show
 ```
 
 For programmatic use (e.g. from scripts or notebooks), the generator logic is exposed via the `generate()` function in `src/main.py`.

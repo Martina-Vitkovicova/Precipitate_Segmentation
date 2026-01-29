@@ -1,10 +1,7 @@
 import hashlib
-import random
 from typing import List, Tuple, Dict
 import cv2
-import matplotlib.pyplot as plt
 import numpy as np
-import scipy
 from scipy import ndimage
 import skimage
 import skimage.draw as skdraw
@@ -15,44 +12,45 @@ from scipy.ndimage import distance_transform_edt
 from src.config_parsing import GeneralParams, MatrixParams, TextureParams
 from src.generators.finite_voronoi_gen import get_finite_voronoi
 from src.type_definitions import (Image, IndexedRegion, Vertices, Edge, Point, RandomState, Coords, BorderMask,
-                                  GradientImage)
+                                  GradientImage, IntPair, IntRange, Vec3i)
 
 
-def generate_matrix(vor_rng: RandomState, general_params: GeneralParams, params: MatrixParams) -> Image:
+def generate_matrix(matrix_rng: RandomState, general_params: GeneralParams, params: MatrixParams) -> Image:
     """
-    Creates a background matrix image consisting of regions (grains) with borders.
+    Generate a grayscale image representing grain-like metal matrix background.
+    The image is created by tessellating the image domain into Voronoi regions that act as grains.
 
-    Returns
-    -------
-    Numpy 2D ndarray image.
+    Controlled by MatrixParams for grain intensity, border distortion, border width and grain texture.
+    GeneralParams supplies the global image size and light direction.
+
+    Stochastic behaviour is fully determined by `matrix_rng`.
     """
-    perlin_rng, borders_rng, gauss_rng, texture_rng = split_random_state(vor_rng, 4)
+    perlin_rng, borders_rng, gauss_rng, texture_rng = split_random_state(matrix_rng, 4)
 
     img_size = general_params.image_size
     width, height = img_size
     image = np.full((height, width), 140, dtype=np.float32)
+    border_mask = np.zeros_like(image)
 
-    num_points = vor_rng.randint(*params.grains_num_range)
-    region_generator_points = np.column_stack((vor_rng.uniform(0, width, num_points),
-                                               vor_rng.uniform(0, height, num_points)))
-    vor = scipy.spatial.Voronoi(region_generator_points)
-    regions, vertices = get_finite_voronoi(vor)
+    num_points = matrix_rng.randint(*params.grains_num_range)
+    region_generator_points = np.column_stack((matrix_rng.uniform(0, width, num_points),
+                                               matrix_rng.uniform(0, height, num_points)))
+    regions, vertices = get_finite_voronoi(region_generator_points)
 
     modified_borders = distort_borders(regions, vertices, img_size, params.border_jaggedness,
                                        params.border_perturbation_noise)
-    border_mask = np.zeros_like(image)
 
     for region in regions:
         y_coords, x_coords = get_distorted_region_coords(modified_borders, region)
         row, col = skdraw.polygon(y_coords, x_coords, shape=image.shape)
-        intensity = vor_rng.randint(*params.grains_intensity_range)
+        intensity = matrix_rng.randint(*params.grains_intensity_range)
         image[row, col] = intensity
 
         if params.perlin_noise_enabled:
-            image = add_perlin_noise(image, perlin_rng, row, col, params.perlin_noise_alpha_range,
-                                     params.perlin_noise_scales)
+            image = _add_perlin_noise(image, perlin_rng, row, col, params.perlin_noise_alpha_range,
+                                      params.perlin_noise_scales)
         if params.gaussian_noise_enabled:
-            image = add_gaussian_noise(image, gauss_rng, row, col, params.gaussian_noise_alpha_range)
+            image = _add_gaussian_noise(image, gauss_rng, row, col, params.gaussian_noise_alpha_range)
 
         perim_row, perim_col = skdraw.polygon_perimeter(y_coords, x_coords, shape=image.shape)
         border_mask[perim_row, perim_col] = 1
@@ -62,36 +60,27 @@ def generate_matrix(vor_rng: RandomState, general_params: GeneralParams, params:
                                               params.porous_texture_intensity_range, params.porous_texture_size_range)
         image = add_porous_texture(image, texture_rng, general_params.light_direction, porous_texture_params)
 
-    image = modify_borders(image, border_mask, params.border_width, params.border_variable_width_enabled, borders_rng,
-                           130, params.border_shading_enabled, general_params.light_direction,
-                           params.border_shading_intensity_range)
+    image = _modify_borders(image, border_mask, params.border_width, params.border_variable_width_enabled, borders_rng,
+                            130, params.border_shading_enabled, general_params.light_direction,
+                            params.border_shading_intensity_range)
 
     return image
 
 
-def split_random_state(parent_rng, num):
-    return [np.random.RandomState(parent_rng.randint(0, 10**9)) for _ in range(num)]
+def split_random_state(parent_rng: RandomState, num: int) -> List[RandomState]:
+    """Derive independent RNG streams from a parent RNG."""
+    return [np.random.RandomState(parent_rng.randint(0, 10 ** 9)) for _ in range(num)]
 
 
-def generate_distant_points(rng, min_distance, width, height):
-    while True:
-        p1, p2 = np.column_stack((rng.uniform(0, width, 2), rng.uniform(0, height, 2)))
-        distance = np.linalg.norm(p1 - p2)
-
-        if distance > min_distance:
-            return p1, p2
-
-
-def distort_borders(regions: List[IndexedRegion], vertices: Vertices, img_size: List[int],
+def distort_borders(regions: List[IndexedRegion], vertices: Vertices, img_size: IntPair,
                     border_jaggedness: float, border_noise: float) -> Dict[Edge, Vertices]:
     """ Transforms borders consisting of straight lines to jagged polylines. """
-
-    modified_borders = {}
+    modified_borders: dict[Edge, Vertices] = {}
 
     for region in regions:
         for i in range(len(region)):
             edge = (region[i], region[(i + 1) % len(region)])
-            sorted_edge = tuple(sorted(edge))
+            sorted_edge: Edge = (min(edge), max(edge))
 
             if sorted_edge not in modified_borders:
                 edge_seed = get_edge_seed(sorted_edge)
@@ -106,16 +95,14 @@ def distort_borders(regions: List[IndexedRegion], vertices: Vertices, img_size: 
 
 def get_edge_seed(edge: Edge) -> int:
     """ Create a unique seed to set a random generator with. """
-
     edge_bytes = str(edge).encode('utf-8')
     return int(hashlib.sha256(edge_bytes).hexdigest(), 16) % (2 ** 32)
 
 
-def divide_edge(start: Point, end: Point, rng: RandomState, img_size: List[int], border_jaggedness: float,
+def divide_edge(start: Point, end: Point, rng: RandomState, img_size: IntPair, border_jaggedness: float,
                 border_noise: float) -> Vertices:
     """ Divides a straight line given by start and end point to number of segments and adds noise to the coordinates
     to make the new line jagged. """
-
     # if the line doesn't lie inside the image area, it's not necessary to divide it
     # if it lies partially, we divide only the part of the line which lies in the area
     is_inside, new_start, new_end = cv2.clipLine((0, 0, *img_size), start, end)
@@ -146,12 +133,11 @@ def divide_edge(start: Point, end: Point, rng: RandomState, img_size: List[int],
 
 
 def get_distorted_region_coords(modified_borders: Dict[Edge, Vertices], region: IndexedRegion) -> Tuple[Coords, Coords]:
-    """ Return coordinates of the distorted region border. """
-
+    """ Return coordinates of the distorted region border as integer arrays. """
     y_coords, x_coords = [], []
     for j in range(len(region)):
         edge = (region[j], region[(j + 1) % len(region)])
-        sorted_edge = tuple(sorted(edge))
+        sorted_edge: Edge = (min(edge), max(edge))
         poly_edge = modified_borders[sorted_edge]
 
         if edge != sorted_edge:
@@ -163,25 +149,26 @@ def get_distorted_region_coords(modified_borders: Dict[Edge, Vertices], region: 
     return np.array(y_coords).astype(int), np.array(x_coords).astype(int)
 
 
-def modify_borders(image: Image, border_mask: BorderMask, width: int, change_width: bool,
-                   rng: RandomState, intensity: int, border_3d: bool, light_direction: List[int],
-                   shading_intensity_range: Tuple[int, int]) -> Image:
-    """ Changes the border appearance - width and intensity. """
-
-    border_mask = change_border_width(border_mask, rng, width, change_width)
+def _modify_borders(image: Image, border_mask: BorderMask, width: int, change_width: bool,
+                    rng: RandomState, intensity: int, border_3d: bool, light_direction: Vec3i,
+                    shading_intensity_range: IntRange) -> Image:
+    """ Modify border appearance by thickening and optional directional shading.
+    `border_mask` is expected to be uint8 with non-zero border pixels."""
+    border_mask = _change_border_width(border_mask, rng, width, change_width)
 
     if not border_3d:
         new_image = image.copy()
         new_image[border_mask > 0] = intensity + rng.randint(-20, -19)
     else:
-        grad_shading = compute_3d_border_effect(border_mask, rng, light_direction, shading_intensity_range)
+        grad_shading = _compute_3d_border_effect(border_mask, rng, light_direction, shading_intensity_range)
         border_mask = skimage.morphology.dilation(border_mask, skimage.morphology.disk(width))
-        new_image = blend_borders_w_bg(border_mask, image, grad_shading)
+        new_image = _blend_borders_w_bg(border_mask, image, grad_shading)
 
     return new_image
 
 
-def change_border_width(border_mask, rng: RandomState, width: int, change_width: bool):
+def _change_border_width(border_mask, rng: RandomState, width: int, change_width: bool) -> BorderMask:
+    """Thicken borders with either fixed or locally varying width."""
     if not change_width:
         disk = skimage.morphology.disk(width)
         return skimage.morphology.dilation(border_mask, disk)
@@ -200,23 +187,21 @@ def change_border_width(border_mask, rng: RandomState, width: int, change_width:
 
         xs = contour[:, 0].astype(int)
         ys = contour[:, 1].astype(int)
-        widths = generate_widths(length, rng, num_control_points, min_width, max_width)
+        widths = _generate_widths(length, rng, num_control_points, min_width, max_width)
         width_map[ys, xs] = widths
-        # plt.imshow(width_map)
-        # plt.show()
 
     border_distance, (closest_border_y, closest_border_x) = distance_transform_edt(1 - border_mask, return_indices=True)
-    # plt.imshow(dt)
-    # plt.show()
 
     half_distance_band = (width_map[closest_border_y, closest_border_x] * 0.5)
     thickened_borders = (border_distance <= half_distance_band).astype(np.uint8) * 255
-    thickened_borders = ndimage.gaussian_filter(thickened_borders, sigma=width//2, truncate=0.6)
+    thickened_borders = ndimage.gaussian_filter(thickened_borders, sigma=width // 2, truncate=0.6)
 
     return thickened_borders
 
 
-def generate_widths(length, rng: RandomState, num_control_points, min_width, max_width):
+def _generate_widths(length: int, rng: RandomState, num_control_points: int, min_width: float, max_width: float) \
+        -> np.ndarray:
+    """ Generate smoothly varying border widths along a border of given length. """
     control_pts_x = np.linspace(0, length - 1, num_control_points)
     control_pts_y = rng.uniform(min_width, max_width, num_control_points)
     xs = np.arange(length)
@@ -226,12 +211,10 @@ def generate_widths(length, rng: RandomState, num_control_points, min_width, max
     return widths
 
 
-def compute_3d_border_effect(border_mask: BorderMask, rng: RandomState, light_direction: Tuple[int, int, int],
-                             shading_intensity_range: Tuple[int, int]) -> GradientImage:
-    """ Compute borders intensitys to make it look like 3D edges. """
-
-    # todo do the 3d effect for the whole image at once?
-    height_map = get_height_map(border_mask, 1.5)
+def _compute_3d_border_effect(border_mask: BorderMask, rng: RandomState, light_direction: Vec3i,
+                              shading_intensity_range: IntRange) -> GradientImage:
+    """ Compute directional shading on borders using a height-map normal approximation. """
+    height_map = _get_height_map(border_mask, 1.5)
     dx, dy = np.gradient(height_map)
     # dz points perpendicularly away from the surface
     dz = np.ones_like(height_map)
@@ -253,15 +236,13 @@ def compute_3d_border_effect(border_mask: BorderMask, rng: RandomState, light_di
 
     lower, upper = [x + rng.randint(-5, 5) for x in shading_intensity_range]
     gradient_shading = gradient_shading * (upper - lower) + lower
-    # gradient_shading = ndimage.gaussian_filter(gradient_shading, sigma=1)
 
-    # when should be cast to int?
     return gradient_shading
 
 
-def blend_borders_w_bg(border_mask: BorderMask, image: Image, grad_shading: GradientImage) -> Image:
-    """ Blends the 3d border effect image with the original image according to the height map. """
-    height_map = get_height_map(border_mask, 1.5)
+def _blend_borders_w_bg(border_mask: BorderMask, image: Image, grad_shading: GradientImage) -> Image:
+    """ Blend shaded borders into the image using the height map as alpha. """
+    height_map = _get_height_map(border_mask, 1.5)
     border_mask = border_mask.astype(bool)
     new_image = image.copy()
 
@@ -271,12 +252,12 @@ def blend_borders_w_bg(border_mask: BorderMask, image: Image, grad_shading: Grad
     return new_image
 
 
-def add_perlin_noise(image: Image, rng: RandomState, row: Coords, col: Coords, perlin_noise: Tuple[int, int],
-                     perlin_noise_scale) -> Image:
+def _add_perlin_noise(image: Image, rng: RandomState, row: Coords, col: Coords, perlin_noise_alpha: IntRange,
+                      perlin_noise_scales: List[int]) -> Image:
     """ Adds perlin noise the individual cells. """
     new_image = image.copy()
-    alpha = rng.randint(*perlin_noise) / 100
-    divisor = rng.choice(perlin_noise_scale)
+    alpha = rng.randint(*perlin_noise_alpha) / 100
+    divisor = rng.choice(perlin_noise_scales)
     res = (image.shape[0] // divisor, image.shape[1] // divisor)
 
     height, width = image.shape
@@ -288,18 +269,20 @@ def add_perlin_noise(image: Image, rng: RandomState, row: Coords, col: Coords, p
     return new_image
 
 
-def add_gaussian_noise(image: Image, rng: RandomState, row: Coords, col: Coords,
-                       gaussian_noise: Tuple[int, int]) -> Image:
+def _add_gaussian_noise(image: Image, rng: RandomState, row: Coords, col: Coords,
+                        gaussian_noise_alpha: IntRange) -> Image:
+    """ Add zero-mean Gaussian noise inside a region mask. """
     new_image = image.copy()
     noise = rng.normal(0, 1, (1025, 1025))
-    alpha = rng.randint(*gaussian_noise) * 0.03
+    alpha = rng.randint(*gaussian_noise_alpha) * 0.03
     noise = noise - noise.mean()
     noise_amplitude = alpha * 127.5
     new_image[row, col] = image[row, col] + noise[row, col] * noise_amplitude
     return new_image
 
 
-def add_porous_texture(image: Image, rng: RandomState, light_dir, params: TextureParams) -> Image:
+def add_porous_texture(image: Image, rng: RandomState, light_dir: Vec3i, params: TextureParams) -> Image:
+    """ Add porous-like impulse texture with a directional dark/light offset derived from `light_dir`. """
     h, w = image.shape
 
     density = rng.uniform(*params.density_range)
@@ -320,7 +303,8 @@ def add_porous_texture(image: Image, rng: RandomState, light_dir, params: Textur
     return image + combined
 
 
-def _compute_shift(light_dir, size_range):
+def _compute_shift(light_dir: Vec3i, size_range: IntRange) -> Tuple[float, float]:
+    """ Compute directional shift for dark texture based on light direction and average impulse size. """
     light_x, light_y, _ = light_dir
     light_x, light_y = -light_x, -light_y  # invert axis to match matrix shading
     light_vec = np.array([light_x, light_y], dtype=np.float32)
@@ -333,7 +317,8 @@ def _compute_shift(light_dir, size_range):
     return dx, dy
 
 
-def _draw_impulses(h, w, rng, density, size_range):
+def _draw_impulses(h: int, w: int, rng: RandomState, density: float, size_range: IntRange) -> Image:
+    """ Draw random circular impulses on a blank image. """
     texture = np.zeros((h, w), dtype=np.float32)
     num = int(rng.poisson(density * h * w))
     if num <= 0:
@@ -353,21 +338,15 @@ def _draw_impulses(h, w, rng, density, size_range):
     return texture
 
 
-def get_height_map(border_mask: BorderMask, sigma: float) -> Image:
-    """ Computes an image with high values in the center of voronoi borders which gradually gets smaller allowing to use
-    it as an alpha mask for blending the voronoi borders to the image. """
+def _get_height_map(border_mask: BorderMask, sigma: float) -> Image:
+    """ Computes an image peaking at the center of voronoi borders which gradually get smaller. Used as alpha mask
+    for blending the voronoi borders to the image. """
 
     distance_map = ndimage.distance_transform_edt(border_mask)
-    # dm = (distance_map / distance_map.max() * 255).astype(np.uint8)
     height_map = ndimage.gaussian_filter(distance_map, sigma=sigma)
-    # hm = cv2.bilateralFilter(dm, 5, 10, 5)
-    # plt.imshow(height_map, cmap="gray")
-    # plt.show()
 
     # normalize the height map to range [0, 1]
     max_distance = np.max(height_map)
     height_map = height_map / max_distance if max_distance > 0 else height_map
-    # plt.imshow(height_map, cmap="gray")
-    # plt.show()
 
     return height_map

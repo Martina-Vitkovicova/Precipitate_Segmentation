@@ -15,10 +15,10 @@ Vertices: TypeAlias = NDArray[np.float64]
 IndexedRegion: TypeAlias = List[int]
 
 # Represents a sorted edge as a tuple of two integers referencing indices in Vertices
-Edge: TypeAlias = Tuple[int]
+Edge: TypeAlias = Tuple[int, int]
 
 # Represents a point as a tuple of two integers (x, y)
-Point: TypeAlias = Tuple[int]
+Point: TypeAlias = Tuple[int, int]
 
 # Represents a NumPy random number generator
 RandomState: TypeAlias = np.random.RandomState
@@ -35,19 +35,20 @@ VoronoiRidge: TypeAlias = Tuple[int, int, int]
 # Dictionary where keys are ridge point indices and values are lists of ridge tuples
 AllRidges: TypeAlias = Dict[int, List[VoronoiRidge]]
 
-# Consists of two float coordinates stored in a NumPy array
-FloatPoint: TypeAlias = NDArray[np.float64]
-
-# Three ints for grayscale color
-Color: TypeAlias = List[int]
-
-# Binary mask with precipitates
+# Binary mask
 Mask: TypeAlias = NDArray[np.float32]
 
-# NDArray of shape (num_spline_points, 1, 2) used by cv2 to fill contours
+# NDArray of shape (N, 1, 2) used by cv2
 Contour: TypeAlias = NDArray[np.int32]
 
+# Range of two integers
 IntRange = Tuple[int, int]
+
+# Range of two floats
 FloatRange = Tuple[float, float]
+
+# Pair of integers
 IntPair = Tuple[int, int]
+
+# 3D vector of integers
 Vec3i = Tuple[int, int, int]
