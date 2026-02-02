@@ -9,7 +9,7 @@ from src.image_visualization import show_image_mask
 
 
 DEFAULT_GENERATION = "test"
-DEFAULT_CONFIG_PATH = Path(__file__).parent / "../config/img_params_new.json"
+DEFAULT_CONFIG_PATH = Path(__file__).parent / "../config/base_params.json"
 DEFAULT_OUTPUT_DIR = Path("../../Data")
 
 
@@ -82,9 +82,9 @@ def main(argv: Optional[List[str]] = None) -> None:
 if __name__ == "__main__":
     main()
     # generate(gen="test",
-    #          img_params_path="../config/img_params_new.json",
+    #          img_params_path="../config/params_cl4.json",
     #          img_save_path="../../Data",
-    #          save=True,
+    #          save=False,
     #          show=True,
     #          seed=None,
     #          num=1)

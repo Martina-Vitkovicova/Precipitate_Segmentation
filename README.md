@@ -66,7 +66,7 @@ Dataset generation is performed by running `main.py` as a module from the projec
 A minimal example that generates one image-mask pair, displays it and then saves it to disk with metadata:
 
 ```bash
-python -m src.main --num 1 --gen experiment1 --config config/img_params_new.json --save --show
+python -m src.main --num 1 --gen experiment1 --config config/base_params.json --save --show
 ```
 
 For programmatic use (e.g. from scripts or notebooks), the generator logic is exposed via the `generate()` function in `src/main.py`.
