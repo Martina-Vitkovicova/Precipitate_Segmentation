@@ -16,24 +16,24 @@ Represents the polycrystalline metal matrix forming the image background, subdiv
 - Voronoi-based grain partitioning
 - Configurable number and size of grains
 - Configurable grain boundary width, jaggedness, noise and shading
-- Configurable texture composed of Perlin noise, Gaussian noise and porous pattern
+- Configurable texture composed of Perlin noise, Gaussian noise and porous pattern.
 
 ### Precipitates
 Often very small, dark features located on top of the matrix surface, usually exhibiting local shading.
 - Spline-based shapes with embossing
-- Configurable number, size range, size distribution and intensity range
+- Configurable number, size range, size distribution and intensity range.
 
 ### Etch Pits
 Recessed surface defects in the matrix with pronounced shading.
 - Elliptical shapes with perturbations
-- Configurable number, size range, intensity range, shading and texture
+- Configurable number, size range, intensity range, shading and texture.
 
 ### Imaging Artefacts
 Non-material effects introduced by the imaging process.
 - Global illumination gradients
 - Corner and bottom blur effects
 - Directional lighting
-- Noise
+- Noise.
 
 
 ## Outputs
@@ -49,7 +49,7 @@ Dataset size and image size are configurable.
 - Generator behaviour is fully defined by JSON configuration files
 - Randomness is controlled via explicit random seeds
 - Identical configurations and seeds produce identical datasets
-- Example configuration files are provided and can be used directly
+- Example configuration files are provided and can be used directly.
 
 
 ## Intended Usage
@@ -76,11 +76,11 @@ For programmatic use (e.g. from scripts or notebooks), the generator logic is ex
 The real dataset was analysed in terms of:
 - precipitate counts, sizes, shapes and intensities
 - matrix intensity characteristics
-- imaging artefacts (blur, illumination gradients).
+- imaging artefacts (blur, illumination gradients, ...)
 
 Based on this analysis, images were divided into five distinct visual clusters with cluster-specific configurations provided.
 
 
 ## Limitations
-- The generator oes not explicitly simulate microscope physics and all visual features observed in real images
-- Example configurations are tailored to the analysed dataset
+- The generator does not explicitly simulate microscope physics and all visual features observed in real images
+- Example configurations are tailored to the analysed dataset.
