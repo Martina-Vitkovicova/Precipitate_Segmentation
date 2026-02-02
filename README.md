@@ -40,7 +40,7 @@ Non-material effects introduced by the imaging process.
 The generator produces datasets consisting of directories with:
 - `img.png` – synthetic grayscale SEM-like image  
 - `mask.png` – binary precipitate mask  
-- `meta.json` – generation metadata  
+- `metadata.json` – generation metadata  
 
 Dataset size and image size are configurable.
 
