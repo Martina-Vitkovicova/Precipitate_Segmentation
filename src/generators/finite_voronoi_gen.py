@@ -3,7 +3,7 @@ from typing import Tuple, List, Dict
 import numpy as np
 from scipy.spatial import Voronoi
 
-from src.type_definitions import IndexedRegion, Vertices, AllRidges, Edge, Point
+from src.utils.type_definitions import IndexedRegion, Vertices, AllRidges, Edge, Point
 
 
 def _build_all_ridges(vor: Voronoi) -> AllRidges:

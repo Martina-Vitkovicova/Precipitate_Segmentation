@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Sequence, List, Dict, Any
 
-from src.type_definitions import IntRange, FloatRange, IntPair, Vec3i
+from src.utils.type_definitions import IntRange, FloatRange, IntPair, Vec3i
 
 
 def _as_int_range(v: Sequence[Any], *, name: str) -> IntRange:

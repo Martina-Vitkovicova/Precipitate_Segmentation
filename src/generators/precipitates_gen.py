@@ -5,8 +5,8 @@ import numpy as np
 from numpy.typing import NDArray
 from scipy.interpolate import splprep, splev
 
-from src.config_parsing import GeneralParams, PrecipitatesParams
-from src.type_definitions import Image, RandomState, Mask, Contour, IntRange, Vec3i
+from src.utils.config_parsing import GeneralParams, PrecipitatesParams
+from src.utils.type_definitions import Image, RandomState, Mask, Contour, IntRange, Vec3i
 
 
 def add_precipitates(image: Image, precip_rng: RandomState, general_params: GeneralParams,

@@ -7,6 +7,9 @@ It was developed primarily for precipitate segmentation under limited annotated 
 but can also be used as an experimental framework for studying the impact of controlled visual features 
 on neural network training.
 
+A minimal end-to-end segmentation training pipeline implemented as a Jupyter notebook
+demonstrates how synthetic images can be combined with real data to train and evaluate a neural network segmentation model.
+
 
 ## Modelled Image Components
 Image generation is controlled via a JSON configuration file. The main configurable components are:
@@ -60,7 +63,7 @@ Typical workflow:
 4. Evaluate performance on real images  
 
 
-## Example Usage
+### Example Usage
 Dataset generation is performed by running `main.py` as a module from the project root.
 
 A minimal example that generates one image-mask pair, displays it and then saves it to disk with metadata:
@@ -71,6 +74,19 @@ python -m src.main --num 1 --gen experiment1 --config config/base_params.json --
 
 For programmatic use (e.g. from scripts or notebooks), the generator logic is exposed via the `generate()` function in `src/main.py`.
 
+### Segmentation Training Pipeline
+
+A minimal end-to-end segmentation workflow is provided in the notebook:
+
+`notebooks/simple_gen-train-test.ipynb`
+
+The notebook demonstrates the complete pipeline:
+
+1. Load real and synthetic datasets
+2. Prepare training and validation dataloaders
+3. Train a U-Net segmentation model
+4. Evaluate predictions on a held-out test dataset
+5. Save evaluation metrics and example predictions
 
 ## Dataset Analysis and Clustering
 The real dataset was analysed in terms of:

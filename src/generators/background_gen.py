@@ -9,10 +9,10 @@ import skimage.draw as skdraw
 from perlin_numpy import generate_perlin_noise_2d
 from scipy.ndimage import distance_transform_edt
 
-from src.config_parsing import GeneralParams, MatrixParams, TextureParams
+from src.utils.config_parsing import GeneralParams, MatrixParams, TextureParams
 from src.generators.finite_voronoi_gen import get_finite_voronoi
-from src.type_definitions import (Image, IndexedRegion, Vertices, Edge, Point, RandomState, Coords, BorderMask,
-                                  GradientImage, IntPair, IntRange, Vec3i)
+from src.utils.type_definitions import (Image, IndexedRegion, Vertices, Edge, Point, RandomState, Coords, BorderMask,
+                                        GradientImage, IntPair, IntRange, Vec3i)
 
 
 def generate_matrix(matrix_rng: RandomState, general_params: GeneralParams, params: MatrixParams) -> Image:

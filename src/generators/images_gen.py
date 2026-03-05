@@ -7,11 +7,11 @@ import cv2
 import numpy as np
 from matplotlib import pyplot as plt
 
-from src.config_parsing import GeneratorConfig
+from src.utils.config_parsing import GeneratorConfig
 from src.generators.background_gen import generate_matrix
 from src.generators.etch_pits_gen import add_etch_pits
 from src.generators.precipitates_gen import add_precipitates
-from src.type_definitions import Image, RandomState, Mask, FloatRange, IntRange
+from src.utils.type_definitions import Image, RandomState, Mask, FloatRange, IntRange
 
 
 def generate_image(root_seed: int, img_params_path: str) -> Tuple[Image, Mask]:

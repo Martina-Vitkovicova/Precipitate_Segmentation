@@ -2,9 +2,9 @@ from typing import List
 import cv2
 import numpy as np
 
-from src.config_parsing import GeneralParams, EtchPitsParams, TextureParams
+from src.utils.config_parsing import GeneralParams, EtchPitsParams, TextureParams
 from src.generators.background_gen import add_porous_texture
-from src.type_definitions import RandomState, Image, Vec3i, IntPair, Point, Contour, Mask, IntRange
+from src.utils.type_definitions import RandomState, Image, Vec3i, IntPair, Point, Contour, Mask, IntRange
 
 
 def add_etch_pits(image: Image, etch_pits_rng: RandomState, general_params: GeneralParams,

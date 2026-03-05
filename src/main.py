@@ -5,7 +5,7 @@ from typing import Optional, List
 import numpy as np
 
 from src.generators.images_gen import generate_image, save_images
-from src.image_visualization import show_image_mask
+from src.utils.image_visualization import show_image_mask
 
 
 DEFAULT_GENERATION = "test"
