@@ -1,9 +1,9 @@
-from typing import Tuple, List, Optional, Dict
+from typing import Tuple, List, Dict
 
 import numpy as np
 from scipy.spatial import Voronoi
 
-from src.type_definitions import IndexedRegion, Vertices, AllRidges, FloatPoint, Edge
+from src.type_definitions import IndexedRegion, Vertices, AllRidges, Edge, Point
 
 
 def _build_all_ridges(vor: Voronoi) -> AllRidges:
@@ -33,7 +33,7 @@ def _sort_region_counterclockwise(new_vertices: Vertices, region: IndexedRegion)
     return np.array(region)[np.argsort(angles)].tolist()
 
 
-def _compute_far_point(p1: int, p2: int, v2: int, vor: Voronoi, radius: float) -> FloatPoint:
+def _compute_far_point(p1: int, p2: int, v2: int, vor: Voronoi, radius: float) -> Point:
     """ Compute the 'far point' for an infinite Voronoi ridge. """
     tangent = vor.points[p2] - vor.points[p1]
     tangent /= np.linalg.norm(tangent)
@@ -77,14 +77,14 @@ def _make_region_finite(p1: int, region: IndexedRegion, vor: Voronoi, radius: fl
     return sorted_region, new_vertices
 
 
-def get_finite_voronoi(vor: Voronoi, radius: Optional[float] = None) -> Tuple[List[IndexedRegion], Vertices]:
+def get_finite_voronoi(region_generator_points: Vertices, radius: int = 1000) -> Tuple[List[IndexedRegion], Vertices]:
     """
-    Reconstruct infinite Voronoi regions into finite polygons.
+    Create finite Voronoi tesselation from 2D Voronoi diagram by extending infinite edges to a specified radius.
 
     Parameters
     ----------
-    vor : Voronoi
-        Input Voronoi diagram (2D).
+    region_generator_points : ndarray
+        2D points used to generate the Voronoi diagram.
     radius : float, optional
         Distance to 'points at infinity'.
 
@@ -95,11 +95,10 @@ def get_finite_voronoi(vor: Voronoi, radius: Optional[float] = None) -> Tuple[Li
     vertices : ndarray
         Coordinates of the finite Voronoi vertices.
     """
+    vor = Voronoi(region_generator_points)
+
     if vor.points.shape[1] != 2:
         raise ValueError("Requires 2D input")
-
-    if radius is None:
-        radius = 1000
 
     added_points = {}
     new_regions = []
