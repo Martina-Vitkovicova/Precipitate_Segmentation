@@ -66,3 +66,21 @@ class FocalTverskyLoss(torch.nn.Module):
 
     def __repr__(self):
         return self.description()
+
+
+_LOSS_REGISTRY = {
+    "focal": FocalLoss,
+    "focal_dice": FocalDiceLoss,
+    "focal_tversky": FocalTverskyLoss,
+}
+
+
+def make_loss(name: str, **kwargs):
+    try:
+        return _LOSS_REGISTRY[name](**kwargs)
+    except KeyError:
+        raise ValueError(f"Unknown loss: {name}")
+
+
+def available_losses():
+    return list(_LOSS_REGISTRY.keys())

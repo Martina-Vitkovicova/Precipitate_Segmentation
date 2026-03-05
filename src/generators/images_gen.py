@@ -62,7 +62,7 @@ def split_random_state(parent_rng: RandomState, num: int) -> List[RandomState]:
 def save_images(root_path: Path, seed: int, img: Image, mask: Mask, img_params_path: str | None, gen: str) -> None:
     """ Save generated image and mask to disk under a folder named by seed and generation number. """
     root_path = Path(root_path)
-    path = root_path / f"seed-{seed}_gen-{gen}"
+    path = root_path / f"seed-{seed}"
     path.mkdir(exist_ok=True, parents=True)
     plt.imsave(path / "img.png", img, cmap='gray', vmin=0, vmax=255)
     plt.imsave(path / "mask.png", mask, cmap='gray', vmin=0, vmax=255)
