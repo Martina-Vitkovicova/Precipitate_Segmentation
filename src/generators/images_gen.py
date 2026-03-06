@@ -1,65 +1,68 @@
 import json
 import os
 from pathlib import Path
-from typing import List
+from typing import List, Tuple
 
 import cv2
 import numpy as np
 from matplotlib import pyplot as plt
 
-from src.generators.background_gen import voronoi_bg
+from src.utils.config_parsing import GeneratorConfig
+from src.generators.background_gen import generate_matrix
 from src.generators.etch_pits_gen import add_etch_pits
 from src.generators.precipitates_gen import add_precipitates
-from src.type_definitions import Image, RandomState
+from src.utils.type_definitions import Image, RandomState, Mask, FloatRange, IntRange
 
 
-def generate_image(root_seed, img_params_path):
+def generate_image(root_seed: int, img_params_path: str) -> Tuple[Image, Mask]:
+    """
+    Generate a single synthetic image and precipitate mask from a config file.
+
+    The pipeline applies matrix generation, etch pits, precipitates, configured
+    imaging effects, and a final small Gaussian noise term. Randomness is fully
+    determined by `root_seed`.
+    """
     root_rng = np.random.RandomState(root_seed)
     vor_rng, etch_pits_rng, precip_rng, corner_blur_rng, bottom_blur_rng, illum_rng, gauss_rng = (
         split_random_state(root_rng, 7))
 
     with open(img_params_path, "r") as file:
-        img_params = json.load(file)
+        raw_params = json.load(file)
 
-    light_direction = img_params.get("light_direction")
-    img_size = img_params.get("img_size")
-    background = voronoi_bg(vor_rng, img_size=img_size, light_direction=light_direction,
-                            **get_subparams(img_params, "voronoi_"))
+    img_params = GeneratorConfig.from_dict(raw_params)
 
-    image = add_etch_pits(background, etch_pits_rng, light_direction=light_direction,
-                          **get_subparams(img_params, "etch_pits_"))
-    image, mask = add_precipitates(image, precip_rng, light_direction=light_direction,
-                                   **get_subparams(img_params, "precipitate_"))
+    matrix = generate_matrix(vor_rng, img_params.general, img_params.matrix)
+    image = add_etch_pits(matrix, etch_pits_rng, img_params.general, img_params.etch_pits)
+    image, mask = add_precipitates(image, precip_rng, img_params.general, img_params.precipitates)
 
-    if img_params.get("img_corner_blur"):
-        image = add_corner_blur(image, corner_blur_rng, **get_subparams(img_params, "img_corner_blur_"))
+    effects = img_params.effects
+    if effects.corner_blur_enabled:
+        image = add_corner_blur(image, corner_blur_rng, effects.corner_blur_radius_range,
+                                effects.corner_blur_kernel_size_range)
 
-    if img_params.get("img_bottom_blur"):
-        image = add_bottom_blur(image, bottom_blur_rng, **get_subparams(img_params, "img_bottom_blur_"))
+    if effects.bottom_blur_enabled:
+        image = add_bottom_blur(image, bottom_blur_rng, effects.bottom_blur_height_range,
+                                effects.bottom_blur_kernel_size_range)
 
-    if img_params.get("img_illumination_gradient"):
-        image = add_illumination_gradient(image, illum_rng,
-                                          **get_subparams(img_params, "img_illumination_gradient_"))
+    if effects.illumination_gradient_enabled:
+        image = add_illumination_gradient(image, illum_rng, effects.illumination_gradient_strength_range,
+                                          effects.illumination_gradient_angle_range)
+
     image = add_gaussian_noise(image, gauss_rng)
+    image = np.clip(image, 0.0, 255.0)
 
     return image, mask
 
 
-def split_random_state(parent_rng, num):
-    return [np.random.RandomState(parent_rng.randint(0, 10**9)) for _ in range(num)]
+def split_random_state(parent_rng: RandomState, num: int) -> List[RandomState]:
+    """Derive independent RNG streams from a parent RNG."""
+    return [np.random.RandomState(int(parent_rng.randint(0, 10**9))) for _ in range(num)]
 
 
-def get_subparams(params: dict, prefix: str) -> dict:
-    out = {}
-    for key, value in params.items():
-        if key.startswith(prefix):
-            out[key[len(prefix):]] = value
-    return out
-
-
-def save_images(root_path, seed, img, mask, img_params_path=None, gen=1):
+def save_images(root_path: Path, seed: int, img: Image, mask: Mask, img_params_path: str | None, gen: str) -> None:
+    """ Save generated image and mask to disk under a folder named by seed and generation number. """
     root_path = Path(root_path)
-    path = root_path / f"seed-{seed}_gen-{gen}"
+    path = root_path / f"seed-{seed}"
     path.mkdir(exist_ok=True, parents=True)
     plt.imsave(path / "img.png", img, cmap='gray', vmin=0, vmax=255)
     plt.imsave(path / "mask.png", mask, cmap='gray', vmin=0, vmax=255)
@@ -71,6 +74,7 @@ def save_images(root_path, seed, img, mask, img_params_path=None, gen=1):
 
 
 def save_metadata(img_params_path, seed, gen, path):
+    """ Save image generation parameters and seed to metadata.json in the image folder. """
     with open(img_params_path, "r") as file:
         img_params = json.load(file)
 
@@ -82,15 +86,19 @@ def save_metadata(img_params_path, seed, gen, path):
         json.dump(updated_img_params, file, indent=4)
 
 
-def add_gaussian_noise(image: Image, rng: RandomState):
-    noise = rng.normal(0, 1, (1024, 1024))
-    noise -= noise.mean()
-    alpha = rng.randint(1, 3) * 0.01
-    new_image = image + noise * alpha * 127.5
-    return new_image
+def add_gaussian_noise(image: Image, rng: RandomState) -> Image:
+    """ Add small zero-mean Gaussian noise to the whole image. """
+    h, w = image.shape
+    noise = rng.normal(0.0, 1.0, (h, w)).astype(np.float32)
+    noise -= float(noise.mean())
+
+    alpha = float(rng.randint(1, 3)) * 0.01
+    return image + noise * (alpha * 127.5)
 
 
-def add_illumination_gradient(image, rng, strength_range, angle_range):
+def add_illumination_gradient(image: Image, rng: RandomState, strength_range: FloatRange,
+                              angle_range: FloatRange) -> Image:
+    """ Add a directional illumination gradient to the image to simulate microscopy imaging effect. """
     h, w = image.shape
     y = np.linspace(-0.5, 0.5, h)
     x = np.linspace(-0.5, 0.5, w)
@@ -109,11 +117,11 @@ def add_illumination_gradient(image, rng, strength_range, angle_range):
     return image * mask
 
 
-def add_corner_blur(image: Image, rng: RandomState, radius_range: List[int], kernel_size_range: List[int]) -> Image:
+def add_corner_blur(image: Image, rng: RandomState, radius_range: IntRange, kernel_size_range: IntRange) -> Image:
+    """ Blur a random corner using a circular alpha mask. """
     h, w = image.shape
-    corners = [[0, 0], [w, 0], [w, h], [0, h]]
-    i = rng.randint(0, len(corners))
-    corner = corners[i]
+    corners = [(0, 0), (w - 1, 0), (w - 1, h - 1), (0, h - 1)]
+    corner = corners[int(rng.randint(0, len(corners)))]
 
     # make circular mask in that corner
     mask = np.zeros((h, w), np.uint8)
@@ -132,7 +140,8 @@ def add_corner_blur(image: Image, rng: RandomState, radius_range: List[int], ker
     return result
 
 
-def add_bottom_blur(image: Image, rng: RandomState, height_range: List[int], kernel_size_range: List[int]) -> Image:
+def add_bottom_blur(image: Image, rng: RandomState, height_range: IntRange, kernel_size_range: IntRange) -> Image:
+    """ Blur a band near the bottom edge using a feathered alpha mask. """
     h, w = image.shape
 
     band_size = int(rng.randint(*height_range) + 1)

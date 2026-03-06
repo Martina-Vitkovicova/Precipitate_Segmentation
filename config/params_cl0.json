@@ -1,0 +1,70 @@
+{
+  "general": {
+    "image_size": [1024, 1024],
+    "light_direction": [-1, 2, 2]
+  },
+
+  "matrix": {
+    "grains_num_range": [60, 90],
+    "grains_intensity_range": [140, 150],
+
+    "border_width": 3,
+    "border_variable_width_enabled": true,
+    "border_jaggedness": 0.3,
+    "border_perturbation_noise": 0.5,
+    "border_shading_enabled": true,
+    "border_shading_intensity_range": [20, 250],
+
+    "perlin_noise_enabled": true,
+    "perlin_noise_alpha_range": [3, 6],
+    "perlin_noise_scales": [32, 64, 128, 256],
+
+    "gaussian_noise_enabled": true,
+    "gaussian_noise_alpha_range": [1, 3],
+
+    "porous_texture_enabled": true,
+    "porous_texture_density_range": [0.09, 0.15],
+    "porous_texture_blur_range": [0.2, 0.4],
+    "porous_texture_intensity_range": [8, 12],
+    "porous_texture_size_range": [0, 2]
+  },
+
+  "etch_pits": {
+    "num_range": [0, 5],
+    "intensity_range": [130, 140],
+    "size_range": [8, 22],
+
+    "shading_dark_shadow": 25,
+    "shading_light_shadow": 65,
+    "shading_highlight": 240,
+
+    "texture_density_range": [0.09, 0.15],
+    "texture_blur_range": [0.1, 0.4],
+    "texture_intensity_range": [6, 14],
+    "texture_size_range": [0, 3]
+  },
+
+  "precipitates": {
+    "num_range": [60, 180],
+    "intensity_range": [10, 35],
+    "size_range": [1, 30],
+    "size_distribution": [4000, 40, 30, 20, 15, 10, 5],
+
+    "emboss_enabled": false,
+    "emboss_intensity_range": [20, 230]
+  },
+
+  "effects": {
+    "corner_blur_enabled": true,
+    "corner_blur_radius_range": [100, 400],
+    "corner_blur_kernel_size_range": [0, 7],
+
+    "bottom_blur_enabled": true,
+    "bottom_blur_height_range": [80, 250],
+    "bottom_blur_kernel_size_range": [0, 6],
+
+    "illumination_gradient_enabled": true,
+    "illumination_gradient_strength_range": [0.07, 0.1],
+    "illumination_gradient_angle_range": [-48, -32]
+  }
+}
