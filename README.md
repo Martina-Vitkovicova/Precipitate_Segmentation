@@ -60,7 +60,17 @@ Typical workflow:
 1. Select or modify a JSON configuration  
 2. Generate a synthetic dataset offline  
 3. Train segmentation models using the generated data  
-4. Evaluate performance on real images  
+4. Evaluate performance on real images 
+
+
+### Requirements
+
+Python 3.10 or 3.11
+
+Install dependencies:
+```bash
+pip install -r requirements.txt
+```
 
 
 ### Example Usage
