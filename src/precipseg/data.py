@@ -4,7 +4,7 @@
 # simplified image loading
 
 import os
-import imageio
+from PIL import Image
 import numpy as np
 import albumentations as alb
 import cv2
@@ -186,7 +186,7 @@ def read_image_normalized(
         image_path: os.PathLike,
         dtype=np.float32,
 ) -> NDArray[np.float32]:
-    image = imageio.v2.imread(image_path)
+    image = np.array(Image.open(image_path))
     if image.ndim == 2:
         gray = image
     elif image.ndim == 3 and image.shape[2] in (1, 2):
