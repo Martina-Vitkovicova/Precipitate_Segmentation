@@ -1,29 +1,31 @@
-# Adapted from semseg/training.py in jaroslavknotek/semantic-segmentation.
-# Source: https://github.com/jaroslavknotek/semantic-segmentation/blob/main/src/semseg
-# Changes: simplified padding, replaced multi-channel outputs with sigmoid-based foreground probabilities,
-# unified input handling and added ImageNet normalization.
+from typing import Sequence
 
 import cv2
 import numpy as np
+import numpy.typing as npt
 import torch
 import torch.nn.functional as funct
 from tqdm import tqdm
-from typing import List, Tuple, Union
 
 IMAGENET_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
 IMAGENET_STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 
+Image = Mask = npt.NDArray[np.generic]
+Padding = tuple[int, int, int, int]  # (left, right, top, bottom)
 
-def _pad_to_stride(t: torch.Tensor, stride: int = 32) -> Tuple[torch.Tensor, Tuple[int, int, int, int]]:
-    # t: (B,C,H,W)
+
+def _pad_to_stride(
+    t: torch.Tensor,
+    stride: int = 32,
+) -> tuple[torch.Tensor, Padding]:
     _, _, h, w = t.shape
     pad_h = (stride - h % stride) % stride
     pad_w = (stride - w % stride) % stride
-    pads = (0, pad_w, 0, pad_h)  # (left, right, top, bottom)
+    pads = (0, pad_w, 0, pad_h)
     return funct.pad(t, pads), pads
 
 
-def _unpad(t: torch.Tensor, pads: Tuple[int, int, int, int]) -> torch.Tensor:
+def _unpad(t: torch.Tensor, pads: Padding) -> torch.Tensor:
     _, pad_w, _, pad_h = pads
     if pad_h:
         t = t[..., :-pad_h, :]
@@ -32,7 +34,7 @@ def _unpad(t: torch.Tensor, pads: Tuple[int, int, int, int]) -> torch.Tensor:
     return t
 
 
-def _prepare_input_chw(img: np.ndarray, x_channels: int) -> np.ndarray:
+def _prepare_input_chw(img: Image, x_channels: int) -> Image:
     if x_channels not in (1, 3):
         raise ValueError(f"{x_channels=} is not supported; use 1 or 3.")
 
@@ -63,13 +65,13 @@ def _prepare_input_chw(img: np.ndarray, x_channels: int) -> np.ndarray:
 
 def _segment_image(
     model: torch.nn.Module,
-    img: np.ndarray,
+    img: Image,
     *,
-    device: Union[str, torch.device] = "cpu",
+    device: str | torch.device = "cpu",
     x_channels: int = 3,
     pad_stride: int = 32,
     return_logits: bool = False,
-) -> Union[np.ndarray, Tuple[np.ndarray, np.ndarray]]:
+) -> Image | tuple[Image, Image]:
     model.eval()
 
     x_np = _prepare_input_chw(img, x_channels)
@@ -92,12 +94,12 @@ def _segment_image(
 
 def segment_many(
     model: torch.nn.Module,
-    imgs: List[np.ndarray],
+    imgs: Sequence[Image],
     *,
-    device: Union[str, torch.device] = "cpu",
+    device: str | torch.device = "cpu",
     x_channels: int = 3,
     pad_stride: int = 32,
-) -> List[np.ndarray]:
+) -> list[Image]:
     return [
         _segment_image(model, img, device=device, x_channels=x_channels, pad_stride=pad_stride)
         for img in tqdm(imgs, desc="Segmenting", total=len(imgs))

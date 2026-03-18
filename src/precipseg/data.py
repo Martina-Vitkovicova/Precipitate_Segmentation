@@ -1,63 +1,60 @@
-# Adapted from semseg/dataset.py and semseg/io.py in jaroslavknotek/semantic-segmentation.
-# Source: https://github.com/jaroslavknotek/semantic-segmentation/blob/main/src/semseg
-# Changes: path-based loading instead of in-memory arrays, returns torch tensors, ImageNet normalization,
-# simplified image loading
-
 import os
-import imageio
-import numpy as np
+from pathlib import Path
+
 import albumentations as alb
 import cv2
-from typing import List, Dict
-from albumentations import Compose
-from numpy.typing import NDArray
-from torch.utils.data import DataLoader, Dataset
-import torch
-from pathlib import Path
-import sklearn.model_selection as ms
+import imageio
+import numpy as np
 import numpy.typing as npt
+import sklearn.model_selection as ms
+import torch
+from albumentations import Compose
+from matplotlib import pyplot as plt
+from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
+from typing import Sequence
+
+Image = Mask = npt.NDArray[np.generic]
+ImgList = Sequence[Image]
+Loader = DataLoader[dict[str, torch.Tensor]]
+PathPair = tuple[list[Path], list[Path]]
+
 
 IMAGENET_MEAN = np.array([0.485, 0.456, 0.406], dtype=np.float32)
 IMAGENET_STD = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 
 
-class SegDatasetPaths(Dataset):
+class SegDatasetPaths(Dataset[dict[str, torch.Tensor]]):
     def __init__(
-            self,
-            img_paths: List[Path],
-            label_paths: List[Path],
-            transform: Compose,
-            x_channels: int = 1,
-    ):
+        self,
+        img_paths: Sequence[Path],
+        label_paths: Sequence[Path],
+        transform: Compose,
+        x_channels: int = 1,
+    ) -> None:
         assert len(img_paths) == len(label_paths), f"{len(img_paths)=}!={len(label_paths)=}"
 
         self.img_paths = [Path(p) for p in img_paths]
         self.label_paths = [Path(p) for p in label_paths]
-
         self.transform = transform
         self.x_channels = x_channels
 
     def __len__(self) -> int:
         return len(self.img_paths)
 
-    def _load_image(self, path: Path) -> npt.NDArray:
-        img = read_image_normalized(path)
-        return np.float32(img)
+    def _load_image(self, path: Path) -> Image:
+        return np.float32(read_image_normalized(path))
 
-    def _load_label(self, path: Path) -> npt.NDArray:
-        lab = read_image_normalized(path)
-        return np.float32(lab)
+    def _load_label(self, path: Path) -> Mask:
+        return np.float32(read_image_normalized(path))
 
-    def _transform(self, image: NDArray[np.float32], label: NDArray[np.float32]) -> tuple[
-        NDArray[np.float32], NDArray[np.float32]]:
+    def _transform(self, image: Image, label: Mask) -> tuple[Image, Mask]:
         out = self.transform(image=image, mask=label)
         return out["image"], out["mask"]
 
-    def __getitem__(self, idx) -> Dict[str, torch.Tensor]:
+    def __getitem__(self, idx: int) -> dict[str, torch.Tensor]:
         image = self._load_image(self.img_paths[idx])
         label = self._load_label(self.label_paths[idx])
-
         image_aug, label_aug = self._transform(image, label)
 
         x_np = np.stack([image_aug] * self.x_channels, axis=0).astype(np.float32)
@@ -71,32 +68,22 @@ class SegDatasetPaths(Dataset):
 
 
 def prepare_dataloaders_from_paths(
-    img_paths: List[Path],
-    label_paths: List[Path],
+    img_paths: Sequence[Path],
+    label_paths: Sequence[Path],
     train_augmentation: Compose,
     val_augmentation: Compose,
     *,
     batch_size: int = 32,
     val_size: float = 0.33,
     seed: int = 123,
-    x_channels: int = 3
-) -> tuple[DataLoader, DataLoader]:
+    x_channels: int = 3,
+) -> tuple[Loader, Loader]:
     img_train, img_val, label_train, label_val = ms.train_test_split(
-        img_paths, label_paths, test_size=val_size, random_state=seed
+        list(img_paths), list(label_paths), test_size=val_size, random_state=seed
     )
 
-    dataset_train = SegDatasetPaths(
-        img_train,
-        label_train,
-        train_augmentation,
-        x_channels=x_channels,
-    )
-    dataset_val = SegDatasetPaths(
-        img_val,
-        label_val,
-        val_augmentation,
-        x_channels=x_channels,
-    )
+    dataset_train = SegDatasetPaths(img_train, label_train, train_augmentation, x_channels=x_channels)
+    dataset_val = SegDatasetPaths(img_val, label_val, val_augmentation, x_channels=x_channels)
 
     train_dataloader = DataLoader(
         dataset_train,
@@ -115,16 +102,44 @@ def prepare_dataloaders_from_paths(
     return train_dataloader, val_dataloader
 
 
+def build_dataloaders(
+    img_paths: Sequence[Path],
+    mask_paths: Sequence[Path],
+    *,
+    patch_size: int,
+    x_channels: int,
+    batch_size: int,
+    val_size: float,
+) -> tuple[Loader, Loader]:
+    train_aug = setup_augmentation(
+        patch_size=patch_size,
+        blur_sharp_power=0.8,
+        noise_value=0.01,
+        rotate_deg=20,
+    )
+    val_aug = setup_augmentation(patch_size=patch_size)
+
+    return prepare_dataloaders_from_paths(
+        img_paths,
+        mask_paths,
+        train_augmentation=train_aug,
+        val_augmentation=val_aug,
+        batch_size=batch_size,
+        val_size=val_size,
+        x_channels=x_channels,
+    )
+
+
 def setup_augmentation(
-        patch_size: int,
-        *,
-        advanced: bool = False,
-        flip_vertical: bool = False,
-        flip_horizontal: bool = False,
-        blur_sharp_power: float | None = None,
-        noise_value: float | None = None,
-        rotate_deg: int | None = None,
-        interpolation: int = cv2.INTER_CUBIC,
+    patch_size: int,
+    *,
+    advanced: bool = False,
+    flip_vertical: bool = False,
+    flip_horizontal: bool = False,
+    blur_sharp_power: float | None = None,
+    noise_value: float | None = None,
+    rotate_deg: int | None = None,
+    interpolation: int = cv2.INTER_CUBIC,
 ) -> Compose:
     patch_size_padded = int(patch_size * 1.5)
     transform_list = [
@@ -134,9 +149,9 @@ def setup_augmentation(
 
     if advanced:
         transform_list += [
-            alb.Perspective(p=.2),
-            alb.GridDistortion(p=.2, num_steps=17),
-            alb.RandomGridShuffle(p=.2, grid=(13, 13)),
+            alb.Perspective(p=0.2),
+            alb.GridDistortion(p=0.2, num_steps=17),
+            alb.RandomGridShuffle(p=0.2, grid=(13, 13)),
         ]
     if rotate_deg is not None:
         transform_list += [
@@ -160,32 +175,25 @@ def setup_augmentation(
         ]
 
     if flip_horizontal:
-        transform_list += [
-            alb.HorizontalFlip(p=0.5),
-        ]
+        transform_list += [alb.HorizontalFlip(p=0.5)]
     if flip_vertical:
-        transform_list += [
-            alb.VerticalFlip(p=0.5),
-        ]
+        transform_list += [alb.VerticalFlip(p=0.5)]
 
     transform_list += [alb.CenterCrop(patch_size, patch_size)]
-
     return alb.Compose(transform_list)
 
 
-def normalize_image(image: npt.NDArray) -> NDArray[np.float32]:
-    max_value = image.max()
-    min_value = image.min()
+def normalize_image(image: Image) -> Image:
+    image_f = image.astype(np.float32, copy=False)
+    max_value = float(image_f.max())
+    min_value = float(image_f.min())
     if max_value == min_value:
         tqdm.write("Image is constant.")
-        return image
-    return (image - min_value) / (max_value - min_value)
+        return image_f
+    return (image_f - min_value) / (max_value - min_value)
 
 
-def read_image_normalized(
-        image_path: os.PathLike,
-        dtype=np.float32,
-) -> NDArray[np.float32]:
+def read_image_normalized(image_path: os.PathLike[str] | str, dtype: npt.DTypeLike = np.float32) -> Image:
     image = imageio.v2.imread(image_path)
     if image.ndim == 2:
         gray = image
@@ -197,6 +205,80 @@ def read_image_normalized(
     else:
         raise ValueError(f"Unsupported image shape: {image.shape}")
 
-    image = normalize_image(gray)
-    return image.astype(dtype)
+    image_norm = normalize_image(gray)
+    return image_norm.astype(dtype)
 
+
+def load_paths(root: Path, n: int | None = None) -> PathPair:
+    img_paths = sorted(root.rglob("*/img.png"))
+    if n is not None:
+        img_paths = img_paths[:n]
+    label_paths = [p.parent / "mask.png" for p in img_paths]
+    return img_paths, label_paths
+
+
+def load_clustered(synth_root: Path, base_counts: Sequence[int], multiplier: int, prefix: str) -> PathPair:
+    img_paths: list[Path] = []
+    for i, ratio in enumerate(base_counts):
+        cluster = sorted(synth_root.rglob(f"*{prefix}{i}/img.png"))
+        k = ratio * multiplier
+        if len(cluster) < k:
+            raise ValueError(f"Cluster {i}: requested {k}, found {len(cluster)}")
+        img_paths += cluster[:k]
+    return img_paths, [p.parent / "mask.png" for p in img_paths]
+
+
+def show_augmented_triple(n_show: int, train_dl: Loader) -> None:
+    shown = 0
+    for batch in train_dl:
+        x, y = batch["x"], batch["y"]
+
+        for i in range(x.shape[0]):
+            img = x[i].permute(1, 2, 0).cpu().numpy()
+            mask = y[i, 0].cpu().numpy()
+            denom = img.max() - img.min()
+            img_vis = (img - img.min()) / denom if denom > 0 else np.zeros_like(img)
+
+            plt.figure(figsize=(8, 4))
+
+            plt.subplot(1, 3, 1)
+            plt.imshow(img_vis, cmap="gray", vmin=0, vmax=1)
+            plt.title("Augmented Image")
+
+            plt.subplot(1, 3, 2)
+            plt.imshow(img, cmap="gray")
+            plt.title("Normalised Augmented Image")
+
+            plt.subplot(1, 3, 3)
+            plt.imshow(mask, cmap="gray", vmin=0, vmax=1)
+            plt.title("Mask")
+
+            plt.tight_layout()
+            plt.show()
+
+            shown += 1
+            if shown >= n_show:
+                break
+
+        if shown >= n_show:
+            break
+
+
+def save_image_results(imgs: ImgList, labels: ImgList, preds: ImgList, run_dir: Path, max_images: int = 6) -> None:
+    out_dir = run_dir / "image_results"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    i = 1
+    for img, label, pred in zip(imgs, labels, preds):
+        if max_images is not None and i > max_images:
+            break
+
+        fig, axs = plt.subplots(1, 3, figsize=(16, 4))
+        for ax, title, im_ in zip(axs, ["img", "mask", "prediction"], [img, label, pred]):
+            ax.imshow(im_, cmap="gray")
+            ax.set_title(title)
+            ax.axis("off")
+        plt.tight_layout()
+        fig.savefig(out_dir / f"res{i}.png", dpi=150)
+        plt.close(fig)
+        i += 1

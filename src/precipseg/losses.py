@@ -3,29 +3,29 @@ import torch.nn.functional as funct
 
 
 class FocalLoss(torch.nn.Module):
-    def __init__(self, alpha=0.5, gamma=2, reduction="mean"):
+    def __init__(self, alpha: float = 0.5, gamma: float = 2.0, reduction: str = "mean") -> None:
         super().__init__()
         self.alpha, self.gamma, self.reduction = alpha, gamma, reduction
 
-    def forward(self, inputs, targets):
+    def forward(self, inputs: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
         bce = funct.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
         pt = torch.exp(-bce)
         focal = self.alpha * (1 - pt) ** self.gamma * bce
         return focal.mean()
 
-    def description(self):
+    def description(self) -> str:
         return f"FocalLoss(alpha={self.alpha}, gamma={self.gamma}, reduction='{self.reduction}')"
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return self.description()
 
 
 class FocalDiceLoss(torch.nn.Module):
-    def __init__(self, alpha=0.3, gamma=2.0, smooth=1e-6):
+    def __init__(self, alpha: float = 0.3, gamma: float = 2.0, smooth: float = 1e-6) -> None:
         super().__init__()
         self.alpha, self.gamma, self.smooth = alpha, gamma, smooth
 
-    def forward(self, inputs, targets):
+    def forward(self, inputs: torch.Tensor, targets: torch.Tensor) -> torch.Tensor:
         probs = torch.sigmoid(inputs)
         bce = funct.binary_cross_entropy_with_logits(inputs, targets, reduction="none")
         pt = torch.exp(-bce)
@@ -35,20 +35,27 @@ class FocalDiceLoss(torch.nn.Module):
                 probs.sum(dim=(1, 2, 3)) + targets.sum(dim=(1, 2, 3)) + self.smooth)
         return 0.5 * (focal + dice.mean())
 
-    def description(self):
+    def description(self) -> str:
         return f"FocalDiceLoss(alpha={self.alpha}, gamma={self.gamma}, smooth={self.smooth})"
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return self.description()
 
 
 class FocalTverskyLoss(torch.nn.Module):
-    def __init__(self, alpha=0.7, beta=0.3, gamma=1.3, smooth=1e-6, bce_weight=0.):
+    def __init__(
+        self,
+        alpha: float = 0.7,
+        beta: float = 0.3,
+        gamma: float = 1.3,
+        smooth: float = 1e-6,
+        bce_weight: float = 0.0,
+    ) -> None:
         super().__init__()
         self.alpha, self.beta, self.gamma = alpha, beta, gamma
         self.smooth, self.bce_weight = smooth, bce_weight
 
-    def forward(self, logits, target):
+    def forward(self, logits: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
         target = target.float()
         p = torch.sigmoid(logits)
         tp = (p * target).sum(dim=(1, 2, 3))
@@ -59,28 +66,30 @@ class FocalTverskyLoss(torch.nn.Module):
         bce = funct.binary_cross_entropy_with_logits(logits, target, reduction="mean")
         return self.bce_weight * bce + (1.0 - self.bce_weight) * ft.mean()
 
-    def description(self):
-        return ("FocalTverskyLoss("
-                f"alpha={self.alpha}, beta={self.beta}, gamma={self.gamma}, "
-                f"smooth={self.smooth}, bce_weight={self.bce_weight})")
+    def description(self) -> str:
+        return (
+            "FocalTverskyLoss("
+            f"alpha={self.alpha}, beta={self.beta}, gamma={self.gamma}, "
+            f"smooth={self.smooth}, bce_weight={self.bce_weight})"
+        )
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         return self.description()
 
 
-_LOSS_REGISTRY = {
+_LOSS_REGISTRY: dict[str, type[torch.nn.Module]] = {
     "focal": FocalLoss,
     "focal_dice": FocalDiceLoss,
     "focal_tversky": FocalTverskyLoss,
 }
 
 
-def make_loss(name: str, **kwargs):
+def make_loss(name: str, **kwargs: float) -> torch.nn.Module:
     try:
         return _LOSS_REGISTRY[name](**kwargs)
-    except KeyError:
-        raise ValueError(f"Unknown loss: {name}")
+    except KeyError as exc:
+        raise ValueError(f"Unknown loss: {name}") from exc
 
 
-def available_losses():
+def available_losses() -> list[str]:
     return list(_LOSS_REGISTRY.keys())

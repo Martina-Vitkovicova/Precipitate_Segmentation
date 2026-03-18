@@ -1,7 +1,11 @@
+from pathlib import Path
+from typing import Sequence
+
 import numpy as np
 import numpy.typing as npt
 
 Array = npt.NDArray[np.floating] | npt.NDArray[np.integer]
+Metrics = tuple[list[float], list[float], list[float], list[float], list[float]]
 
 
 def _to_bin(a: Array, threshold: float) -> npt.NDArray[np.uint8]:
@@ -49,3 +53,47 @@ def binary_precision_recall_f1(gt: Array, pred: Array, threshold: float = 0.5) -
         f1 = 2.0 * precision * recall / (precision + recall)
 
     return float(precision), float(recall), float(f1)
+
+
+def compute_metric_curves(
+    test_lbls: Sequence[Array],
+    test_preds: Sequence[Array],
+    thresholds: Sequence[float] | npt.NDArray[np.floating],
+) -> Metrics:
+    dice_vals, iou_vals, precision_vals, recall_vals, f1_vals = [], [], [], [], []
+
+    for thr in thresholds:
+        dices, ious, precisions, recalls, f1s = [], [], [], [], []
+
+        for gt, pred in zip(test_lbls, test_preds):
+            dices.append(binary_dice(gt, pred, float(thr)))
+            ious.append(binary_iou(gt, pred, float(thr)))
+
+            p, r, f1 = binary_precision_recall_f1(gt, pred, float(thr))
+            precisions.append(p)
+            recalls.append(r)
+            f1s.append(f1)
+
+        dice_vals.append(float(np.nanmean(dices)))
+        iou_vals.append(float(np.nanmean(ious)))
+        precision_vals.append(float(np.nanmean(precisions)))
+        recall_vals.append(float(np.nanmean(recalls)))
+        f1_vals.append(float(np.nanmean(f1s)))
+
+    return dice_vals, iou_vals, precision_vals, recall_vals, f1_vals
+
+
+def save_metric_curves(
+    path: Path,
+    thresholds: Sequence[float] | npt.NDArray[np.floating],
+    dice: Sequence[float],
+    iou: Sequence[float],
+    precision: Sequence[float],
+    recall: Sequence[float],
+    f1: Sequence[float],
+) -> None:
+    with open(path, "w", encoding="utf-8") as f:
+        f.write("threshold\tdice\tiou\tprecision\trecall\tf1\n")
+        for row in zip(thresholds, dice, iou, precision, recall, f1):
+            thr, d, i, p, r, f1_val = row
+            f.write(f"{float(thr):.4f}\t{float(d):.6f}\t{float(i):.6f}\t{float(p):.6f}\t{float(r):.6f}\t{float(f1_val):.6f}\n")

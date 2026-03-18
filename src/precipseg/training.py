@@ -1,22 +1,41 @@
-# Adapted from semseg/training.py in jaroslavknotek/semantic-segmentation.
-# Source: https://github.com/jaroslavknotek/semantic-segmentation/blob/main/src/semseg
-# Changes: validation IoU, structured per-epoch and summary logging, clearer training flow,
-# explicit early stopping, and resource checks.
-
+import gc
 import itertools
+import json
+import random
+import shutil
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Callable, Optional, Union, Tuple
+from typing import Any, Callable
 
 import numpy as np
+import psutil
 import torch
+from segmentation_models_pytorch import Unet
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
-import shutil
-import psutil
+from src.precipseg import predictions
+from src.precipseg.data import save_image_results
+from src.precipseg.losses import make_loss
+from src.precipseg.metrics import compute_metric_curves, save_metric_curves
+
+REQUIRED_KEYS = ("dice", "iou", "precision", "recall", "f1")
+
+Batch = dict[str, torch.Tensor]
+Loss = Callable[[torch.Tensor, torch.Tensor], torch.Tensor]
+
+
+@dataclass
+class ImgData:
+    train_dl: DataLoader[Batch]
+    val_dl: DataLoader[Batch]
+    test_imgs: list[np.ndarray]
+    test_labels: list[np.ndarray]
+    real_imgs: list[Path]
+    synth_imgs: list[Path]
+    synth_root: str | Path
 
 
 class ResourceGuard(RuntimeError):
@@ -109,19 +128,24 @@ class EpochLogger:
 
 
 def _get_lr(optimizer: torch.optim.Optimizer) -> float:
-    return optimizer.param_groups[0]["lr"]
+    return float(optimizer.param_groups[0]["lr"])
 
 
-def _step(model, batch, loss_fn, device="cpu"):
+def _step(model: torch.nn.Module, batch: Batch, loss_fn: Loss, device: str | torch.device = "cpu") -> torch.Tensor:
     batch = {k: v.to(device) for k, v in batch.items()}
     pred = model(batch["x"])
     return loss_fn(pred, batch["y"])
 
 
-def _train_epoch(model, dataloader, optimizer, step_fn) -> float:
+def _train_epoch(
+    model: torch.nn.Module,
+    dataloader: DataLoader[Batch],
+    optimizer: torch.optim.Optimizer,
+    step_fn: Callable[[Batch], torch.Tensor],
+) -> float:
     model.train()
 
-    def train_step(batch):
+    def train_step(batch: Batch) -> float:
         optimizer.zero_grad(set_to_none=True)
         loss = step_fn(batch)
         loss.backward()
@@ -132,7 +156,13 @@ def _train_epoch(model, dataloader, optimizer, step_fn) -> float:
     return float(np.mean(losses)) if losses else float("nan")
 
 
-def _validate_epoch(model, dataloader, step_fn, *, threshold: float = 0.5) -> tuple[float, float]:
+def _validate_epoch(
+    model: torch.nn.Module,
+    dataloader: DataLoader[Batch],
+    step_fn: Callable[[Batch], torch.Tensor],
+    *,
+    threshold: float = 0.5,
+) -> tuple[float, float]:
     model.eval()
     losses: list[float] = []
     ious: list[float] = []
@@ -157,12 +187,15 @@ def _validate_epoch(model, dataloader, step_fn, *, threshold: float = 0.5) -> tu
     return float(np.mean(losses)) if losses else float("nan"), float(np.mean(ious)) if ious else float("nan")
 
 
-def _setup_scheduler(optimizer, scheduler_patience: int):
+def _setup_scheduler(
+    optimizer: torch.optim.Optimizer,
+    scheduler_patience: int,
+) -> Callable[[float], None]:
     scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, "min", patience=scheduler_patience, factor=0.3
     )
 
-    def scheduler_fn(val_loss: float):
+    def scheduler_fn(val_loss: float) -> None:
         scheduler.step(val_loss)
 
     return scheduler_fn
@@ -183,19 +216,19 @@ class TrainResult:
 
 def _run_training(
     model: torch.nn.Module,
-    train_dataloader: DataLoader,
-    val_dataloader: DataLoader,
-    loss_fn: Callable,
+    train_dataloader: DataLoader[Batch],
+    val_dataloader: DataLoader[Batch],
+    loss_fn: Loss,
     *,
     epochs: int | None,
     optimizer: torch.optim.Optimizer,
-    device: str,
-    epoch_logger,
-    disk_path: str = ".",
+    device: str | torch.device,
+    epoch_logger: EpochLogger,
+    disk_path: str | Path = ".",
     iou_threshold: float = 0.5,
-    scheduler=None,
-    early_stopper=None,
-    checkpointer=None,
+    scheduler: Callable[[float], None] | None = None,
+    early_stopper: EarlyStopper | None = None,
+    checkpointer: MetricCheckpointer | None = None,
 ) -> TrainResult:
     train_losses: list[float] = []
     val_losses: list[float] = []
@@ -206,7 +239,7 @@ def _run_training(
     last_val = float("nan")
     last_iou = float("nan")
 
-    def step_fn(batch):
+    def step_fn(batch: Batch) -> torch.Tensor:
         return _step(model, batch, loss_fn, device=device)
 
     start_time = datetime.now()
@@ -214,7 +247,7 @@ def _run_training(
 
     with logging_redirect_tqdm(), tqdm(epochs_iter, desc="Training epochs") as t:
         for epoch in t:
-            last_epoch = epoch
+            last_epoch = int(epoch)
 
             _check_resources(disk_path=disk_path)
 
@@ -230,10 +263,10 @@ def _run_training(
 
             saved = False
             if checkpointer is not None:
-                saved = checkpointer.update(last_val, epoch=epoch, iou=last_iou)
+                saved = checkpointer.update(last_val, epoch=last_epoch, iou=last_iou)
 
             epoch_logger.write_epoch(
-                epoch=epoch,
+                epoch=last_epoch,
                 train_loss=last_train,
                 val_loss=last_val,
                 val_iou=last_iou,
@@ -242,7 +275,7 @@ def _run_training(
             )
 
             t.set_postfix(
-                epoch=epoch,
+                epoch=last_epoch,
                 train_loss=f"{last_train:.5f}",
                 val_loss=f"{last_val:.5f}",
                 val_IoU=f"{last_iou:.3f}",
@@ -270,8 +303,8 @@ def _write_training_summary(
     epoch_logger: EpochLogger,
     *,
     result: TrainResult,
-    loss_fn: Callable,
-    synth_path: str,
+    loss_fn: Callable[..., Any],
+    synth_path: str | Path,
     real_imgs_num: int,
     synth_imgs_num: int,
 ) -> None:
@@ -300,34 +333,35 @@ def _write_training_summary(
 
 
 def train(
-        model: torch.nn.Module,
-        train_dataloader: DataLoader,
-        val_dataloader: DataLoader,
-        loss_fn: Callable,
-        epochs: Optional[int] = None,
-        patience: Optional[int] = None,
-        scheduler_patience: Optional[int] = None,
-        checkpoint_path: Optional[Union[str, Path]] = None,
-        lr: float = 0.001,
-        device: Union[str, torch.device] = "cpu",
-        log_path: Union[str, Path] = "training_log.txt",
-        synth_path: str = "",
-        real_imgs_num: int = 45,
-        synth_imgs_num: int = 450,
-) -> Tuple[list[float], list[float]]:
+    model: torch.nn.Module,
+    train_dataloader: DataLoader,
+    val_dataloader: DataLoader,
+    loss_fn: Loss,
+    epochs: int | None = None,
+    patience: int | None = None,
+    scheduler_patience: int | None = None,
+    checkpoint_path: str | Path | None = None,
+    lr: float = 0.001,
+    device: str | torch.device = "cpu",
+    log_path: str | Path = "training_log.txt",
+    synth_path: str | Path = "",
+    real_imgs_num: int = 45,
+    synth_imgs_num: int = 450,
+) -> tuple[list[float], list[float]]:
     model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     scheduler = _setup_scheduler(optimizer, scheduler_patience) if scheduler_patience is not None else None
     early_stopper = EarlyStopper(patience=patience, min_delta=0.0) if patience is not None else None
 
     checkpointer = None
-    disk_path = "."
+    disk_path: str | Path = "."
     if checkpoint_path is not None:
         checkpoint_path = Path(checkpoint_path)
         checkpointer = MetricCheckpointer(model, checkpoint_path)
-        disk_path = str(checkpoint_path.parent)
+        disk_path = checkpoint_path.parent
 
     epoch_logger = EpochLogger(log_path)
+    result: TrainResult | None = None
 
     try:
         result = _run_training(
@@ -358,8 +392,123 @@ def train(
     if result is not None:
         tqdm.write(
             f"Training finished at epoch {result.last_epoch}: "
-            f"train_loss={result.last_train_loss:.5f}, val_loss={result.last_val_loss:.5f}, val_IoU={result.last_val_iou:.3f}"
+            f"train_loss={result.last_train_loss:.5f}, "
+            f"val_loss={result.last_val_loss:.5f}, val_IoU={result.last_val_iou:.3f}"
         )
         return result.train_losses, result.val_losses
 
     raise RuntimeError("Training did not complete; no result produced.")
+
+
+def create_model(x_channels: int) -> Unet:
+    return Unet(
+        encoder_name="resnet18",
+        encoder_weights="imagenet",
+        in_channels=x_channels,
+        classes=1,
+        activation=None,
+    )
+
+
+def set_seed(seed: int) -> None:
+    random.seed(seed)
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
+
+
+def load_run_json(path: Path) -> dict[str, Any]:
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def has_required_metrics(d: dict[str, Any]) -> bool:
+    return all(k in d for k in REQUIRED_KEYS)
+
+
+def run_one(
+    loss_name: str,
+    loss_params: dict[str, float],
+    run_seed: int,
+    runs_dir: Path,
+    x_channels: int,
+    device: str | torch.device,
+    thresholds: np.ndarray,
+    max_images: int | None,
+    data: ImgData,
+) -> dict[str, Any]:
+    set_seed(run_seed)
+
+    run_dir = runs_dir / f"seed_{run_seed}"
+    run_dir.mkdir(parents=True, exist_ok=True)
+
+    try:
+        model = create_model(x_channels).to(device)
+        loss_fn = make_loss(loss_name, **loss_params)
+
+        checkpoint_path = run_dir / "checkpoint.pt"
+        log_path = run_dir / "log.txt"
+
+        train_loss, val_loss = train(
+            model,
+            data.train_dl,
+            data.val_dl,
+            loss_fn,
+            checkpoint_path=checkpoint_path,
+            patience=10,
+            scheduler_patience=5,
+            device=device,
+            log_path=log_path,
+            synth_path=data.synth_root,
+            real_imgs_num=len(data.real_imgs),
+            synth_imgs_num=len(data.synth_imgs),
+        )
+
+        with torch.inference_mode():
+            test_preds = predictions.segment_many(model, data.test_imgs, device=device, x_channels=x_channels)
+
+        test_lbls = [y.detach().cpu().numpy() if torch.is_tensor(y) else y for y in data.test_labels]
+        test_inps = [x.detach().cpu().numpy() if torch.is_tensor(x) else x for x in data.test_imgs]
+
+        dice_vals, iou_vals, mean_p, mean_r, mean_f1 = compute_metric_curves(
+            test_lbls, test_preds, thresholds
+        )
+        save_metric_curves(run_dir / "metrics.txt", thresholds, dice_vals, iou_vals, mean_p, mean_r, mean_f1)
+        save_image_results(test_inps, test_lbls, test_preds, run_dir, max_images=max_images)
+
+        payload = {
+            "loss": loss_name,
+            "loss_params": loss_params,
+            "seed": int(run_seed),
+            "train_loss": train_loss,
+            "val_loss": val_loss,
+            "dice": dice_vals,
+            "iou": iou_vals,
+            "precision": mean_p,
+            "recall": mean_r,
+            "f1": mean_f1,
+        }
+
+        (run_dir / "run.json").write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        return payload
+
+    finally:
+        try:
+            del test_preds
+        except Exception:
+            pass
+        try:
+            del model
+        except Exception:
+            pass
+        try:
+            del loss_fn
+        except Exception:
+            pass
+
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.synchronize()
+            torch.cuda.empty_cache()
+            torch.cuda.ipc_collect()
+            torch.cuda.reset_peak_memory_stats()

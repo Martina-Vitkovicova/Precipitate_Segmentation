@@ -4,7 +4,7 @@
 
 import itertools
 from dataclasses import dataclass
-from typing import Optional, Tuple
+from typing import Optional
 
 import cv2
 import numpy as np
@@ -15,7 +15,7 @@ from tqdm import tqdm
 
 from src.precipseg.metrics import binary_iou
 
-Array = npt.NDArray
+Array = npt.NDArray[np.generic]
 WeightMap = dict[int, dict[int, float]]
 IndexMap = dict[int, int]
 
@@ -52,12 +52,11 @@ def measure_precision_recall_f1(
     bin_prediction: Array,
     label: Array,
     component_limit: int = 500,
-) -> Tuple[float, float, float]:
-    df, _, _ = match_instances(bin_prediction, label, component_limit=component_limit,)
+) -> tuple[float, float, float]:
+    df, _, _ = match_instances(bin_prediction, label, component_limit=component_limit)
 
     grains_pred = len(df[~df["pred_id"].isna()])
     grains_label = len(df[~df["label_id"].isna()])
-
     tp = df[~df["label_id"].isna() & ~df["pred_id"].isna()]
 
     precision = len(tp) / grains_pred if grains_pred != 0 else np.nan
@@ -68,14 +67,14 @@ def measure_precision_recall_f1(
     else:
         f1 = 0.0
 
-    return precision, recall, f1
+    return float(precision), float(recall), float(f1)
 
 
 def match_instances(
     bin_prediction: Array,
     label: Array,
     component_limit: int = 500,
-) -> Tuple[pd.DataFrame, Array, Array]:
+) -> tuple[pd.DataFrame, Array, Array]:
     bin_prediction = (bin_prediction > 0).astype(np.uint8)
     label = (label > 0).astype(np.uint8)
 
@@ -116,7 +115,7 @@ def _pair_using_linear_sum_assignment(
     p_grains: Array,
     l_grains: Array,
     cap: Optional[int] = 500,
-) -> Tuple[Array, Array]:
+) -> tuple[Array, Array]:
     if cap is not None:
         p_n = min(cap, p_n)
         p_grains[p_grains > cap] = 0
@@ -153,7 +152,7 @@ def _construct_weight_map(weights_dict: WeightMap) -> tuple[Array, IndexMap, Ind
     return weights, p_map, l_map
 
 
-def _collect_pairing_weights(p_n: int, p_grains: Array, l_grains: Array,) -> WeightMap:
+def _collect_pairing_weights(p_n: int, p_grains: Array, l_grains: Array) -> WeightMap:
     weights_dict = {}
 
     for p_grain_id in range(1, p_n):
@@ -167,6 +166,6 @@ def _collect_pairing_weights(p_n: int, p_grains: Array, l_grains: Array,) -> Wei
 
             # Hungarian solves a minimum-cost assignment, so weight = 1 - IoU.
             weight = 1.0 - binary_iou(l_grain_mask, p_grain_mask, threshold=0.5)
-            weights_dict.setdefault(p_grain_id, {}).setdefault(l_grain_id, float(weight))
+            weights_dict.setdefault(p_grain_id, {}).setdefault(int(l_grain_id), float(weight))
 
     return weights_dict
