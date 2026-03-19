@@ -1,4 +1,5 @@
 import os
+import random
 from pathlib import Path
 
 import albumentations as alb
@@ -67,6 +68,12 @@ class SegDatasetPaths(Dataset[dict[str, torch.Tensor]]):
         return {"x": x, "y": y}
 
 
+def seed_worker(worker_id: int) -> None:
+    worker_seed = torch.initial_seed() % 2**32
+    np.random.seed(worker_seed)
+    random.seed(worker_seed)
+
+
 def prepare_dataloaders_from_paths(
     img_paths: Sequence[Path],
     label_paths: Sequence[Path],
@@ -85,19 +92,31 @@ def prepare_dataloaders_from_paths(
     dataset_train = SegDatasetPaths(img_train, label_train, train_augmentation, x_channels=x_channels)
     dataset_val = SegDatasetPaths(img_val, label_val, val_augmentation, x_channels=x_channels)
 
+    g_train = torch.Generator()
+    g_train.manual_seed(seed)
+
+    g_val = torch.Generator()
+    g_val.manual_seed(seed)
+
     train_dataloader = DataLoader(
         dataset_train,
         batch_size=batch_size,
         shuffle=True,
-        num_workers=0,
+        num_workers=4,
         pin_memory=True,
+        persistent_workers=True,
+        worker_init_fn=seed_worker,
+        generator=g_train,
     )
     val_dataloader = DataLoader(
         dataset_val,
         batch_size=batch_size,
         shuffle=False,
-        num_workers=0,
+        num_workers=4,
         pin_memory=True,
+        persistent_workers=True,
+        worker_init_fn=seed_worker,
+        generator=g_val,
     )
     return train_dataloader, val_dataloader
 

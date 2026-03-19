@@ -94,7 +94,7 @@ class MetricCheckpointer:
             msg += f" Val IoU={iou:.3f}."
         tqdm.write(msg)
 
-        torch.save(self.model, self.model_path)
+        torch.save(self.model.state_dict(), self.model_path)
         return True
 
 
@@ -132,7 +132,7 @@ def _get_lr(optimizer: torch.optim.Optimizer) -> float:
 
 
 def _step(model: torch.nn.Module, batch: Batch, loss_fn: Loss, device: str | torch.device = "cpu") -> torch.Tensor:
-    batch = {k: v.to(device) for k, v in batch.items()}
+    batch = {k: v.to(device, non_blocking=True) for k, v in batch.items()}
     pred = model(batch["x"])
     return loss_fn(pred, batch["y"])
 
@@ -159,7 +159,8 @@ def _train_epoch(
 def _validate_epoch(
     model: torch.nn.Module,
     dataloader: DataLoader[Batch],
-    step_fn: Callable[[Batch], torch.Tensor],
+    loss_fn: Loss,
+    device: str | torch.device,
     *,
     threshold: float = 0.5,
 ) -> tuple[float, float]:
@@ -167,16 +168,16 @@ def _validate_epoch(
     losses: list[float] = []
     ious: list[float] = []
 
-    device = next(model.parameters()).device
     with torch.no_grad():
         for batch in dataloader:
-            loss = float(step_fn(batch).detach().cpu().item())
-            losses.append(loss)
-
             x = batch["x"].to(device)
             y_true = batch["y"].to(device)
 
-            y_pred = torch.sigmoid(model(x)) > threshold
+            logits = model(x)
+            loss = loss_fn(logits, y_true)
+            losses.append(float(loss.detach().cpu().item()))
+
+            y_pred = torch.sigmoid(logits) > threshold
             y_true_bin = y_true > 0.5
 
             intersection = (y_pred & y_true_bin).float().sum((1, 2, 3))
@@ -252,7 +253,7 @@ def _run_training(
             _check_resources(disk_path=disk_path)
 
             last_train = _train_epoch(model, train_dataloader, optimizer, step_fn)
-            last_val, last_iou = _validate_epoch(model, val_dataloader, step_fn, threshold=iou_threshold)
+            last_val, last_iou = _validate_epoch(model, val_dataloader, loss_fn, device, threshold=iou_threshold)
 
             train_losses.append(float(last_train))
             val_losses.append(float(last_val))
