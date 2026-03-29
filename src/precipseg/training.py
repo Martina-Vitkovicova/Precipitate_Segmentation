@@ -17,7 +17,7 @@ from tqdm.auto import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
 from src.precipseg import predictions
-from src.precipseg.data import save_image_results
+from src.precipseg.evaluation import save_image_results
 from src.precipseg.losses import make_loss
 from src.precipseg.metrics import compute_metric_curves, save_metric_curves
 

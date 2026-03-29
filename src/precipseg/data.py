@@ -16,7 +16,6 @@ from tqdm import tqdm
 from typing import Sequence
 
 Image = Mask = npt.NDArray[np.generic]
-ImgList = Sequence[Image]
 Loader = DataLoader[dict[str, torch.Tensor]]
 PathPair = tuple[list[Path], list[Path]]
 
@@ -281,23 +280,3 @@ def show_augmented_triple(n_show: int, train_dl: Loader) -> None:
 
         if shown >= n_show:
             break
-
-
-def save_image_results(imgs: ImgList, labels: ImgList, preds: ImgList, run_dir: Path, max_images: int = 6) -> None:
-    out_dir = run_dir / "image_results"
-    out_dir.mkdir(parents=True, exist_ok=True)
-
-    i = 1
-    for img, label, pred in zip(imgs, labels, preds):
-        if max_images is not None and i > max_images:
-            break
-
-        fig, axs = plt.subplots(1, 3, figsize=(16, 4))
-        for ax, title, im_ in zip(axs, ["img", "mask", "prediction"], [img, label, pred]):
-            ax.imshow(im_, cmap="gray")
-            ax.set_title(title)
-            ax.axis("off")
-        plt.tight_layout()
-        fig.savefig(out_dir / f"res{i}.png", dpi=150)
-        plt.close(fig)
-        i += 1
