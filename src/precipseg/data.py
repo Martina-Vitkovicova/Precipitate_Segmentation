@@ -57,8 +57,14 @@ class SegDatasetPaths(Dataset[dict[str, torch.Tensor]]):
         label = self._load_label(self.label_paths[idx])
         image_aug, label_aug = self._transform(image, label)
 
+        if self.x_channels not in (1, 3):
+            raise ValueError(f"{self.x_channels=} is not supported; use 1 or 3.")
+
         x_np = np.stack([image_aug] * self.x_channels, axis=0).astype(np.float32)
-        x_np = (x_np - IMAGENET_MEAN[:, None, None]) / IMAGENET_STD[:, None, None]
+
+        if self.x_channels == 3:
+            x_np = (x_np - IMAGENET_MEAN[:, None, None]) / IMAGENET_STD[:, None, None]
+
         x = torch.from_numpy(x_np).float()
 
         y_fg = (label_aug > 0).astype(np.float32)
@@ -128,6 +134,7 @@ def build_dataloaders(
     x_channels: int,
     batch_size: int,
     val_size: float,
+    split_seed: int = 123,
 ) -> tuple[Loader, Loader]:
     train_aug = setup_augmentation(
         patch_size=patch_size,
@@ -145,6 +152,7 @@ def build_dataloaders(
         batch_size=batch_size,
         val_size=val_size,
         x_channels=x_channels,
+        seed=split_seed,
     )
 
 

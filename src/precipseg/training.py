@@ -17,6 +17,7 @@ from tqdm.auto import tqdm
 from tqdm.contrib.logging import logging_redirect_tqdm
 
 from src.precipseg import predictions
+from src.precipseg.data import build_dataloaders
 from src.precipseg.evaluation import save_image_results
 from src.precipseg.losses import make_loss
 from src.precipseg.metrics import compute_metric_curves, save_metric_curves
@@ -29,13 +30,17 @@ Loss = Callable[[torch.Tensor, torch.Tensor], torch.Tensor]
 
 @dataclass
 class ImgData:
-    train_dl: DataLoader[Batch]
-    val_dl: DataLoader[Batch]
+    train_img_paths: list[Path]
+    train_label_paths: list[Path]
     test_imgs: list[np.ndarray]
     test_labels: list[np.ndarray]
     real_imgs: list[Path]
     synth_imgs: list[Path]
     synth_root: str | Path
+    patch_size: int
+    batch_size: int
+    val_size: float
+    split_seed: int
 
 
 class ResourceGuard(RuntimeError):
@@ -60,7 +65,7 @@ def _check_resources(*, disk_path=".", min_disk_gb=10.0, max_ram_frac=0.90, max_
 
 
 class EarlyStopper:
-    def __init__(self, patience: int = 1, min_delta: float = 0.0):
+    def __init__(self, patience: int = 1, min_delta: float = 1e-3):
         self.patience = patience
         self.min_delta = min_delta
         self.counter = 0
@@ -76,22 +81,26 @@ class EarlyStopper:
 
 
 class MetricCheckpointer:
-    def __init__(self, model: torch.nn.Module, model_path: Path, min_delta: float = 0.0):
+    def __init__(self, model: torch.nn.Module, model_path: Path, min_delta: float = 1e-3):
         self.model = model
         self.model_path = Path(model_path)
         self.model_path.parent.mkdir(exist_ok=True, parents=True)
         self.best_val_loss = np.inf
+        self.best_epoch = None
         self.min_delta = min_delta
 
     def update(self, val_loss: float, *, epoch: int, iou: float | None) -> bool:
         if val_loss > (self.best_val_loss - self.min_delta):
             return False
+
         before = self.best_val_loss
         self.best_val_loss = val_loss
+        self.best_epoch = epoch
 
-        msg = f"Epoch {epoch}: before_val_loss={before:.5f} -> {val_loss:.5f}."
+        msg = f"Epoch {epoch}: val_loss {before:.5f} -> {val_loss:.5f}"
         if iou is not None:
-            msg += f" Val IoU={iou:.3f}."
+            msg += f", val_IoU={iou:.3f}"
+        msg += ", checkpoint saved."
         tqdm.write(msg)
 
         torch.save(self.model.state_dict(), self.model_path)
@@ -352,7 +361,7 @@ def train(
     model.to(device)
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     scheduler = _setup_scheduler(optimizer, scheduler_patience) if scheduler_patience is not None else None
-    early_stopper = EarlyStopper(patience=patience, min_delta=0.0) if patience is not None else None
+    early_stopper = EarlyStopper(patience=patience, min_delta=1e-3) if patience is not None else None
 
     checkpointer = None
     disk_path: str | Path = "."
@@ -391,10 +400,17 @@ def train(
         epoch_logger.close()
 
     if result is not None:
+        if checkpointer is not None and checkpointer.best_epoch is not None:
+            tqdm.write(
+                f"Best checkpoint at epoch {checkpointer.best_epoch} (saved): "
+                f"val_loss={checkpointer.best_val_loss:.5f}."
+            )
+
         tqdm.write(
             f"Training finished at epoch {result.last_epoch}: "
             f"train_loss={result.last_train_loss:.5f}, "
-            f"val_loss={result.last_val_loss:.5f}, val_IoU={result.last_val_iou:.3f}"
+            f"val_loss={result.last_val_loss:.5f}, "
+            f"val_IoU={result.last_val_iou:.3f}"
         )
         return result.train_losses, result.val_losses
 
@@ -440,6 +456,16 @@ def run_one(
 ) -> dict[str, Any]:
     set_seed(run_seed)
 
+    train_dl, val_dl = build_dataloaders(
+        data.train_img_paths,
+        data.train_label_paths,
+        patch_size=data.patch_size,
+        x_channels=x_channels,
+        batch_size=data.batch_size,
+        val_size=data.val_size,
+        split_seed=data.split_seed,
+    )
+
     run_dir = runs_dir / f"seed_{run_seed}"
     run_dir.mkdir(parents=True, exist_ok=True)
 
@@ -452,8 +478,8 @@ def run_one(
 
         train_loss, val_loss = train(
             model,
-            data.train_dl,
-            data.val_dl,
+            train_dl,
+            val_dl,
             loss_fn,
             checkpoint_path=checkpoint_path,
             patience=10,
@@ -464,6 +490,10 @@ def run_one(
             real_imgs_num=len(data.real_imgs),
             synth_imgs_num=len(data.synth_imgs),
         )
+
+        state = torch.load(checkpoint_path, map_location=device)
+        model.load_state_dict(state)
+        model.eval()
 
         with torch.inference_mode():
             test_preds = predictions.segment_many(model, data.test_imgs, device=device, x_channels=x_channels)
@@ -494,6 +524,8 @@ def run_one(
         return payload
 
     finally:
+        del train_dl
+        del val_dl
         try:
             del test_preds
         except Exception:
