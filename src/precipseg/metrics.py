@@ -32,21 +32,24 @@ def _get_gt_instances(test_lbls: Sequence[Array], component_limit: int):
     return gt_instances
 
 
+def _nanmean(values: list) -> float:
+    arr = np.array(values, dtype=float)
+    return float(np.nanmean(arr)) if np.any(np.isfinite(arr)) else np.nan
+
+
 def compute_metric_curves(
-    test_lbls: Sequence[Array],
-    test_preds: Sequence[Array],
-    thresholds: Sequence[float] | npt.NDArray[np.floating],
-    component_limit: int = 1000,
-    min_iou: float = 0.0
+        test_lbls: Sequence[Array],
+        test_preds: Sequence[Array],
+        thresholds: Sequence[float] | npt.NDArray[np.floating],
+        component_limit: int = 1000,
+        min_iou: float = 0.0
 ) -> tuple:
     dice_vals, iou_vals, precision_vals, recall_vals, f1_vals = [], [], [], [], []
 
-    # pre-calculate Ground Truth instances
     gt_instances = _get_gt_instances(test_lbls, component_limit)
 
-    for thr in tqdm(thresholds, desc="Computing metrics across thresholds"):
+    for thr in thresholds:
         dices, ious = [], []
-        # Lists to store per-image metrics for averaging at the end
         img_precisions, img_recalls, img_f1s = [], [], []
 
         for idx, pred in enumerate(test_preds):
@@ -58,39 +61,31 @@ def compute_metric_curves(
             inter = int(np.sum(gt_b & pr_b))
             union = int(np.sum(gt_b | pr_b))
             denom = int(np.sum(gt_b) + np.sum(pr_b))
-
             ious.append(1.0 if union == 0 else inter / union)
             dices.append(1.0 if denom == 0 else (2.0 * inter) / denom)
 
             # instance metrics
             df = match_instances_optimised(pr_b, gt_label_map, gt_areas, component_limit, min_iou)
-
             tp = int((df["pred_id"].notna() & df["label_id"].notna()).sum())
             fp = int((df["pred_id"].notna() & df["label_id"].isna()).sum())
             fn = int((df["pred_id"].isna() & df["label_id"].notna()).sum())
 
-            # calculate per-image stats
             p = tp / (tp + fp) if (tp + fp) > 0 else np.nan
             r = tp / (tp + fn) if (tp + fn) > 0 else np.nan
-            f = 2.0 * p * r / (p + r) if (p + r) > 0 else (0.0 if (p + r) == 0 else np.nan)
+            f = 2.0 * p * r / (p + r) if (p + r) > 0 else np.nan
 
             img_precisions.append(p)
             img_recalls.append(r)
             img_f1s.append(f)
 
-        # average the per-image scores = macro-average
-        m_prec = float(np.nanmean(img_precisions))
-        m_rec = float(np.nanmean(img_recalls))
-
-        if (m_prec + m_rec) > 0:
-            m_f1 = 2.0 * (m_prec * m_rec) / (m_prec + m_rec)
-        else:
-            m_f1 = np.nan
+        # macro-average across images
+        m_prec = _nanmean(img_precisions)
+        m_rec = _nanmean(img_recalls)
+        m_f1 = _nanmean(img_f1s)
 
         precision_vals.append(m_prec)
         recall_vals.append(m_rec)
         f1_vals.append(m_f1)
-
         dice_vals.append(float(np.nanmean(dices)))
         iou_vals.append(float(np.nanmean(ious)))
 
@@ -98,20 +93,26 @@ def compute_metric_curves(
 
 
 def match_instances_optimised(
-    bin_prediction: Array,
-    l_grains: Array,
-    l_areas: Array,
-    component_limit: int,
-    min_iou: float
+        bin_prediction: Array,
+        l_grains: Array,
+        l_areas: Array,
+        component_limit: int,
+        min_iou: float
 ) -> pd.DataFrame:
     p_n, p_grains = cv2.connectedComponents(bin_prediction)
+    l_n = len(l_areas)
+
+    if p_n > component_limit or l_n > component_limit:
+        tqdm.write(
+            f"[WARN] Too many components: component_limit={component_limit} "
+            f"#predictions={p_n} #labels={l_n}. Cropping"
+        )
 
     if p_n > component_limit:
         p_grains[p_grains >= component_limit] = 0
         p_n = component_limit
 
     p_areas = np.bincount(p_grains.ravel())
-    l_n = len(l_areas)
 
     # get weights only for candidates that actually overlap
     weights_dict = _collect_pairing_weights_optimised(p_grains, l_grains, l_areas, p_areas, min_iou)
@@ -147,11 +148,11 @@ def match_instances_optimised(
 
 
 def _collect_pairing_weights_optimised(
-    p_grains: Array,
-    l_grains: Array,
-    l_areas: Array,
-    p_areas: Array,
-    min_iou: float
+        p_grains: Array,
+        l_grains: Array,
+        l_areas: Array,
+        p_areas: Array,
+        min_iou: float
 ) -> WeightMap:
     max_l = len(l_areas)
     combined = p_grains.astype(np.uint64) * max_l + l_grains.astype(np.uint64)
@@ -190,13 +191,13 @@ def _construct_weight_map(weights_dict: WeightMap) -> tuple[Array, IndexMap, Ind
 
 
 def save_metric_curves(
-    path: Path,
-    thresholds: Sequence[float] | npt.NDArray[np.floating],
-    dice: Sequence[float],
-    iou: Sequence[float],
-    precision: Sequence[float],
-    recall: Sequence[float],
-    f1: Sequence[float],
+        path: Path,
+        thresholds: Sequence[float] | npt.NDArray[np.floating],
+        dice: Sequence[float],
+        iou: Sequence[float],
+        precision: Sequence[float],
+        recall: Sequence[float],
+        f1: Sequence[float],
 ) -> None:
     with open(path, "w", encoding="utf-8") as f:
         f.write("threshold\tdice\tiou\tprecision\trecall\tf1\n")
