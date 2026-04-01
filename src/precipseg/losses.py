@@ -49,7 +49,7 @@ class FocalTverskyLoss(torch.nn.Module):
         beta: float = 0.3,
         gamma: float = 1.3,
         smooth: float = 1e-6,
-        bce_weight: float = 0.0,
+        bce_weight: float = 0.3,
     ) -> None:
         super().__init__()
         self.alpha, self.beta, self.gamma = alpha, beta, gamma

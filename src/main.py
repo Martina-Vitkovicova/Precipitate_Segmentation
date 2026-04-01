@@ -8,9 +8,9 @@ from src.generators.images_gen import generate_image, save_images
 from src.utils.image_visualization import show_image_mask
 
 
-DEFAULT_GENERATION = "test"
+DEFAULT_GENERATION = "experiment1"
 DEFAULT_CONFIG_PATH = Path(__file__).parent / "../config/base_params.json"
-DEFAULT_OUTPUT_DIR = Path("../../Data")
+DEFAULT_OUTPUT_DIR = Path("../segm/data")
 
 
 def make_seeds(*, num: int, seed: Optional[int]) -> List[int]:
@@ -81,9 +81,9 @@ def main(argv: Optional[List[str]] = None) -> None:
 
 if __name__ == "__main__":
     main()
-    # generate(gen="test",
+    # generate(gen="experiment2",
     #          img_params_path="../config/params_cl4.json",
-    #          img_save_path="../../Data",
+    #          img_save_path="../segm/data",
     #          save=False,
     #          show=True,
     #          seed=None,
