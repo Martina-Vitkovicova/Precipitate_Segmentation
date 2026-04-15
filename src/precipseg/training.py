@@ -453,6 +453,8 @@ def run_one(
     thresholds: np.ndarray,
     max_images: int | None,
     data: ImgData,
+    num_workers: int = 0,
+    persistent_workers: bool = False,
 ) -> dict[str, Any]:
     set_seed(run_seed)
 
@@ -464,6 +466,8 @@ def run_one(
         batch_size=data.batch_size,
         val_size=data.val_size,
         split_seed=data.split_seed,
+        num_workers=num_workers,
+        persistent_workers=persistent_workers
     )
 
     run_dir = runs_dir / f"seed_{run_seed}"
