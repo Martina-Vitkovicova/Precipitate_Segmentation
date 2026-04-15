@@ -85,10 +85,6 @@ def _generate_precip_size(rng: RandomState, size_range: IntRange, distribution: 
     probabilities = np.array(distribution) / np.sum(distribution)
     index = rng.choice(len(distribution), p=probabilities)
 
-    # sample uniform in area, not radius
-    # r1, r2 = breaks[index], breaks[index + 1]
-    # radius = np.sqrt(rng.uniform(r1 ** 2, r2 ** 2))
-
     radius = rng.randint(breaks[index], breaks[index + 1])
 
     return int(radius)

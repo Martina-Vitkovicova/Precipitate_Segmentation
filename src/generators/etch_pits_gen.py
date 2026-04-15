@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from typing import List
 import cv2
 import numpy as np
@@ -5,6 +6,21 @@ import numpy as np
 from src.utils.config_parsing import GeneralParams, EtchPitsParams, TextureParams
 from src.generators.background_gen import add_porous_texture
 from src.utils.type_definitions import RandomState, Image, Vec3i, IntPair, Point, Contour, Mask, IntRange
+
+
+@dataclass(frozen=True)
+class PitLayerStructure:
+    name: str
+    # Relative shift along the normalized light direction (< 0 means toward the light).
+    offset: float
+    # Relative contour size multiplier for this layer.
+    scale: float
+
+
+@dataclass(frozen=True)
+class PitLayer(PitLayerStructure):
+    intensity: int
+    center: Point
 
 
 def add_etch_pits(image: Image, etch_pits_rng: RandomState, general_params: GeneralParams,
@@ -18,7 +34,7 @@ def add_etch_pits(image: Image, etch_pits_rng: RandomState, general_params: Gene
     to align pit shading and internal texture opposite to the common light direction.
 
     The function modifies the input image in-place and returns the updated image.
-    All stochastic choices are driven exclusively by `rng`.
+    All stochastic choices are driven exclusively by `etch_pits_rng`.
     """
     num = etch_pits_rng.randint(*params.num_range)
     h, w = image.shape
@@ -30,23 +46,58 @@ def add_etch_pits(image: Image, etch_pits_rng: RandomState, general_params: Gene
 
     texture_params = TextureParams(params.texture_density_range, params.texture_blur_range,
                                    params.texture_intensity_range, params.texture_size_range)
-    shading_values = (params.shading_highlight, params.shading_dark_shadow, params.shading_light_shadow)
+
+    pit_layer_structure = _define_pit_layer_structure()
 
     for _ in range(num):
         angle = etch_pits_rng.randint(0, 180)
         size = _generate_pit_size(etch_pits_rng, params.size_range)
         base_intensity = etch_pits_rng.randint(*params.intensity_range)
-        centers = _generate_centers(etch_pits_rng, pad_w, pad_h, general_params.light_direction, size)
+        centers = _generate_centers(etch_pits_rng, pad_w, pad_h, general_params.light_direction, size,
+                                    pit_layer_structure, params.layer_offset_ratio)
 
-        pad_image = _draw_pit(pad_image, etch_pits_rng, centers, size, angle, shading_values, base_intensity,
-                              general_params.light_direction, texture_params)
+        pit_layers = _get_pit_layers(centers, base_intensity, pit_layer_structure, params)
+        pad_image = _draw_pit(pad_image, etch_pits_rng, size, angle, general_params.light_direction, texture_params,
+                              pit_layers)
 
     # crop back to original size
     image = pad_image[pad:pad + h, pad:pad + w]
     return image
 
 
-def _generate_centers(rng: RandomState, width: int, height: int, light_dir: Vec3i, size: IntPair) -> List[Point]:
+def _define_pit_layer_structure() -> list[PitLayerStructure]:
+    """Define the shared geometric layout of pit shading layers."""
+    return [
+        PitLayerStructure(name="highlight", offset=0.0, scale=1.00),
+        PitLayerStructure(name="dark_shadow", offset=-1.1, scale=0.85),
+        PitLayerStructure(name="light_shadow", offset=0.75, scale=0.76),
+        PitLayerStructure(name="base_fill", offset=0.0, scale=0.70),
+    ]
+
+
+def _get_pit_layers(centers: List[Point], base_intensity: int, pit_layer_templates: List[PitLayerStructure],
+                    params: EtchPitsParams) -> List[PitLayer]:
+    layer_intensities = {
+        "highlight": params.shading_highlight,
+        "dark_shadow": params.shading_dark_shadow,
+        "light_shadow": params.shading_light_shadow,
+        "base_fill": base_intensity,
+    }
+
+    return [
+        PitLayer(
+            name=layer_template.name,
+            offset=layer_template.offset,
+            scale=layer_template.scale,
+            intensity=layer_intensities[layer_template.name],
+            center=centers[i],
+        )
+        for i, layer_template in enumerate(pit_layer_templates)
+    ]
+
+
+def _generate_centers(rng: RandomState, width: int, height: int, light_dir: Vec3i, size: IntPair,
+                      layer_structure: List[PitLayerStructure], layer_offset_ratio: float) -> List[Point]:
     """
     Generate a set of pit layer centers with offsets along the light direction.
 
@@ -55,21 +106,18 @@ def _generate_centers(rng: RandomState, width: int, height: int, light_dir: Vec3
     """
     center_x, center_y = rng.randint(0, width), rng.randint(0, height)
 
-    # normalise light direction
     light_x, light_y, _ = light_dir
     light_vec = np.array([light_x, light_y], dtype=np.float32)
     norm = np.linalg.norm(light_vec) + 1e-6
     light_vec /= norm
 
-    step = 0.25 * min(size)
+    # Base displacement magnitude for layer offsets, proportional to the smaller pit axis.
+    step = layer_offset_ratio * min(size)
     step_vec = step * light_vec
 
-    # offsets along the light direction (<0 = towards light)
-    offsets = (0.0, -1.1, 0.0, 0.75)
-
     centers = []
-    for k in offsets:
-        offset = k * step_vec
+    for layer in layer_structure:
+        offset = layer.offset * step_vec
         x = int(round(center_x + float(offset[0])))
         y = int(round(center_y + float(offset[1])))
         centers.append((x, y))
@@ -79,39 +127,41 @@ def _generate_centers(rng: RandomState, width: int, height: int, light_dir: Vec3
 
 def _generate_pit_size(rng: RandomState, size_range: IntRange) -> IntPair:
     """ Sample an elliptical pit size (major/minor axes) from a size range."""
-    size_x = rng.randint(*size_range)
-    size_y = max(3, size_x - rng.randint(size_x // 3, size_x // 2))
-    return size_x, size_y
+    major_axis = rng.randint(*size_range)
+    reduction = rng.randint(max(1, major_axis // 3), max(2, major_axis // 2))
+    minor_axis = max(3, major_axis - reduction)
+    return major_axis, minor_axis
 
 
-def _draw_pit(image: Image, rng: RandomState, centers: List[Point], size: IntPair, angle: int, shading_values: Vec3i,
-              base_intensity: int, light_dir: Vec3i, texture_params: TextureParams) -> Image:
-    """ Draw a single pit composed of multiple shaded layers, then blend it into the image."""
-    temp_image = np.zeros_like(image, dtype=np.uint8)
+def _draw_pit(image: Image, rng: RandomState, size: IntPair, angle: int, light_dir: Vec3i,
+              texture_params: TextureParams, layers: List[PitLayer],) -> Image:
+    """Draw a single pit from resolved pit layers, then blend it into the image."""
+    pit_layers_image = np.zeros_like(image, dtype=np.uint8)
 
-    scales = (1.0, 0.85, 0.76, 0.7)
-    base_center = centers[0]
-    base_contour = _create_pit_shape(image, base_center, angle, size, scales[0], rng)
-    pit_intensities = (*shading_values, base_intensity)
+    # Use the first layer as the reference contour. Other layers are scaled and shifted
+    # variants of the same base shape.
+    base_layer = layers[0]
+    base_center = base_layer.center
+    base_contour = _create_pit_shape(image, base_center, angle, size, base_layer.scale, rng)
 
-    for center, intensity, scale in zip(centers, pit_intensities, scales):
-        scaled_contour = _scale_contour(base_contour, scale, center)
-        dx = center[0] - base_center[0]
-        dy = center[1] - base_center[1]
+    for layer in layers:
+        scaled_contour = _scale_contour(base_contour, layer.scale, base_center)
+
+        dx = layer.center[0] - base_center[0]
+        dy = layer.center[1] - base_center[1]
         moved_contour = _translate_contour(scaled_contour, (dx, dy))
 
-        intensity_w_deviation = int(np.clip(intensity + rng.randint(-5, 5), 0, 255))
+        intensity_w_deviation = int(np.clip(layer.intensity + rng.randint(-5, 5), 0, 255))
         fin_intensity = (intensity_w_deviation, intensity_w_deviation, intensity_w_deviation)
-        cv2.drawContours(temp_image, [moved_contour], -1, fin_intensity, -1)
+        cv2.drawContours(pit_layers_image, [moved_contour], -1, fin_intensity, -1)
 
     blur_size = max(3, int(min(size) * 0.4) | 1)
-    blurred = cv2.GaussianBlur(temp_image, (blur_size, blur_size), sigmaX=0)
+    blurred = cv2.GaussianBlur(pit_layers_image, (blur_size, blur_size), sigmaX=0)
 
-    mask = (temp_image > 0).astype(np.uint8)
-    blurred_w_texture = _add_texture(blurred, mask, rng, light_dir, texture_params)
-    result = _merge_pit_into_image(image, blurred_w_texture, mask, size)
+    mask = (pit_layers_image > 0).astype(np.uint8)
+    textured_pit = _add_texture(blurred, mask, rng, light_dir, texture_params)
 
-    return result
+    return _merge_pit_into_image(image, textured_pit, mask, size)
 
 
 def _create_pit_shape(image: Image, center: Point, angle: int, size: IntPair, scale: float, rng: RandomState) \

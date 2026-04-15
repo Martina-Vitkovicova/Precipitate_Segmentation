@@ -61,8 +61,9 @@ def generate_matrix(matrix_rng: RandomState, general_params: GeneralParams, para
         image = add_porous_texture(image, texture_rng, general_params.light_direction, porous_texture_params)
 
     image = _modify_borders(image, border_mask, params.border_width, params.border_variable_width_enabled, borders_rng,
-                            130, params.border_shading_enabled, general_params.light_direction,
-                            params.border_shading_intensity_range)
+                            params.border_shading_enabled, params.border_flat_intensity,
+                            params.border_shading_intensity_range,
+                            general_params.light_direction)
 
     return image
 
@@ -110,17 +111,17 @@ def divide_edge(start: Point, end: Point, rng: RandomState, img_size: IntPair, b
         return np.array([np.array(start), np.array(end)])
 
     noisy_points = [np.array(new_start)]
-
     line_length = np.linalg.norm(np.array(new_end) - np.array(new_start))
 
-    base_segments = max(1, int(np.sqrt(line_length) * border_jaggedness))
     # changes in x, y coords to make the border jagged
     if border_noise > 0:
-        noise_level = max(2, min(30, int(np.sqrt(line_length) * border_noise) + rng.randint(-2, 2)))
+        noise_level = max(1, min(30, int(np.sqrt(line_length) * border_noise) + rng.randint(-2, 2)))
     else:
         noise_level = 0
+
+    base_segments = max(1, int(np.sqrt(line_length) * border_jaggedness))
     # to how many segments will the line be divided
-    num_segments = max(2, min(15, base_segments + rng.randint(-base_segments // 2, base_segments // 2)))
+    num_segments = max(1, min(15, base_segments + rng.randint(-base_segments // 2, base_segments // 2)))
     # no need to add randomness to the spacing because noise creates the randomness
     points = np.linspace(new_start, new_end, num_segments + 1)
 
@@ -150,15 +151,15 @@ def get_distorted_region_coords(modified_borders: Dict[Edge, Vertices], region: 
 
 
 def _modify_borders(image: Image, border_mask: BorderMask, width: int, change_width: bool,
-                    rng: RandomState, intensity: int, border_3d: bool, light_direction: Vec3i,
-                    shading_intensity_range: IntRange) -> Image:
+                    rng: RandomState, border_3d: bool, flat_intensity: int, shading_intensity_range: IntRange,
+                    light_direction: Vec3i) -> Image:
     """ Modify border appearance by thickening and optional directional shading.
     `border_mask` is expected to be uint8 with non-zero border pixels."""
     border_mask = _change_border_width(border_mask, rng, width, change_width)
 
     if not border_3d:
         new_image = image.copy()
-        new_image[border_mask > 0] = intensity + rng.randint(-20, -19)
+        new_image[border_mask > 0] = flat_intensity
     else:
         grad_shading = _compute_3d_border_effect(border_mask, rng, light_direction, shading_intensity_range)
         border_mask = skimage.morphology.dilation(border_mask, skimage.morphology.disk(width))

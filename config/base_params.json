@@ -12,8 +12,10 @@
     "border_variable_width_enabled": true,
     "border_jaggedness": 0.4,
     "border_perturbation_noise": 0.5,
+
     "border_shading_enabled": true,
     "border_shading_intensity_range": [75, 185],
+    "border_flat_intensity": 120,
 
     "perlin_noise_enabled": true,
     "perlin_noise_alpha_range": [2, 7],
@@ -29,20 +31,11 @@
     "porous_texture_size_range": [0, 2]
   },
 
-  "precipitates": {
-    "num_range": [175, 275],
-    "intensity_range": [5, 35],
-    "size_range": [1, 35],
-    "size_distribution": [4000, 55, 40, 30, 15, 10, 5],
-
-    "emboss_enabled": true,
-    "emboss_intensity_range": [10, 235]
-  },
-
   "etch_pits": {
     "num_range": [1, 6],
     "intensity_range": [100, 135],
     "size_range": [5, 15],
+    "layer_offset_ratio": 0.3,
 
     "shading_dark_shadow": 10,
     "shading_light_shadow": 60,
@@ -52,6 +45,16 @@
     "texture_blur_range": [0.1, 0.4],
     "texture_intensity_range": [7, 15],
     "texture_size_range": [0, 3]
+  },
+
+  "precipitates": {
+    "num_range": [175, 275],
+    "intensity_range": [5, 35],
+    "size_range": [1, 35],
+    "size_distribution": [4000, 55, 40, 30, 15, 10, 5],
+
+    "emboss_enabled": true,
+    "emboss_intensity_range": [10, 235]
   },
 
   "effects": {

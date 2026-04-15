@@ -12,3 +12,5 @@ scikit-image>=0.25,<0.26
 torch>=2.3,<2.4
 tqdm==4.66.4
 perlin-numpy==0.0.1
+seaborn
+psutil

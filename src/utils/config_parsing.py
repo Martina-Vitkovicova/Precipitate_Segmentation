@@ -61,6 +61,7 @@ class MatrixParams:
 
     border_shading_enabled: bool
     border_shading_intensity_range: IntRange
+    border_flat_intensity: int
 
     perlin_noise_enabled: bool
     perlin_noise_alpha_range: IntRange
@@ -88,8 +89,9 @@ class MatrixParams:
 
             border_shading_enabled=bool(d["border_shading_enabled"]),
             border_shading_intensity_range=_as_int_range(
-                d["border_shading_intensity_range"], name="matrix.border_shading_intensity_range"
-            ),
+                d.get("border_shading_intensity_range", [75, 185]),
+                name="matrix.border_shading_intensity_range"),
+            border_flat_intensity=int(d.get("border_constant_intensity", 130)),
 
             perlin_noise_enabled=bool(d["perlin_noise_enabled"]),
             perlin_noise_alpha_range=_as_int_range(d["perlin_noise_alpha_range"], name="matrix.perlin_noise_alpha_range"),
@@ -142,6 +144,7 @@ class EtchPitsParams:
     num_range: IntRange
     intensity_range: IntRange
     size_range: IntRange
+    layer_offset_ratio: float
 
     shading_dark_shadow: int
     shading_light_shadow: int
@@ -158,6 +161,7 @@ class EtchPitsParams:
             num_range=_as_int_range(d["num_range"], name="etch_pits.num_range"),
             intensity_range=_as_int_range(d["intensity_range"], name="etch_pits.intensity_range"),
             size_range=_as_int_range(d["size_range"], name="etch_pits.size_range"),
+            layer_offset_ratio=float(d.get("layer_offset_ratio", 0.25)),
             shading_dark_shadow=int(d["shading_dark_shadow"]),
             shading_light_shadow=int(d["shading_light_shadow"]),
             shading_highlight=int(d["shading_highlight"]),

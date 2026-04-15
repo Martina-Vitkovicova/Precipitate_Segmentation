@@ -89,6 +89,8 @@ def prepare_dataloaders_from_paths(
     val_size: float = 0.33,
     seed: int = 123,
     x_channels: int = 3,
+    num_workers: int = 0,
+    persistent_workers: bool = False,
 ) -> tuple[Loader, Loader]:
     img_train, img_val, label_train, label_val = ms.train_test_split(
         list(img_paths), list(label_paths), test_size=val_size, random_state=seed
@@ -107,9 +109,9 @@ def prepare_dataloaders_from_paths(
         dataset_train,
         batch_size=batch_size,
         shuffle=True,
-        num_workers=4,
+        num_workers=num_workers,
         pin_memory=True,
-        persistent_workers=True,
+        persistent_workers=persistent_workers,
         worker_init_fn=seed_worker,
         generator=g_train,
     )
@@ -117,9 +119,9 @@ def prepare_dataloaders_from_paths(
         dataset_val,
         batch_size=batch_size,
         shuffle=False,
-        num_workers=4,
+        num_workers=num_workers,
         pin_memory=True,
-        persistent_workers=True,
+        persistent_workers=persistent_workers,
         worker_init_fn=seed_worker,
         generator=g_val,
     )
@@ -135,6 +137,8 @@ def build_dataloaders(
     batch_size: int,
     val_size: float,
     split_seed: int = 123,
+    num_workers: int = 0,
+    persistent_workers: bool = False,
 ) -> tuple[Loader, Loader]:
     train_aug = setup_augmentation(
         patch_size=patch_size,
@@ -153,6 +157,8 @@ def build_dataloaders(
         val_size=val_size,
         x_channels=x_channels,
         seed=split_seed,
+        num_workers=num_workers,
+        persistent_workers=persistent_workers
     )
 
 

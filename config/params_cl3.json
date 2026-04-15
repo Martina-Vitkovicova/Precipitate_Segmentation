@@ -12,8 +12,10 @@
     "border_variable_width_enabled": true,
     "border_jaggedness": 0.5,
     "border_perturbation_noise": 0.4,
+
     "border_shading_enabled": true,
     "border_shading_intensity_range": [105, 145],
+    "border_flat_intensity": 110,
 
     "perlin_noise_enabled": true,
     "perlin_noise_alpha_range": [3, 5],
@@ -33,6 +35,7 @@
     "num_range": [3, 7],
     "intensity_range": [110, 120],
     "size_range": [5, 12],
+    "layer_offset_ratio": 0.25,
 
     "shading_dark_shadow": 10,
     "shading_light_shadow": 70,
