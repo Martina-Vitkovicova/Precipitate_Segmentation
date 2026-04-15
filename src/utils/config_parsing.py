@@ -61,6 +61,7 @@ class MatrixParams:
 
     border_shading_enabled: bool
     border_shading_intensity_range: IntRange
+    border_flat_intensity: int
 
     perlin_noise_enabled: bool
     perlin_noise_alpha_range: IntRange
@@ -88,8 +89,9 @@ class MatrixParams:
 
             border_shading_enabled=bool(d["border_shading_enabled"]),
             border_shading_intensity_range=_as_int_range(
-                d["border_shading_intensity_range"], name="matrix.border_shading_intensity_range"
-            ),
+                d.get("border_shading_intensity_range", [75, 185]),
+                name="matrix.border_shading_intensity_range"),
+            border_flat_intensity=int(d.get("border_constant_intensity", 130)),
 
             perlin_noise_enabled=bool(d["perlin_noise_enabled"]),
             perlin_noise_alpha_range=_as_int_range(d["perlin_noise_alpha_range"], name="matrix.perlin_noise_alpha_range"),
