@@ -31,16 +31,6 @@
     "porous_texture_size_range": [0, 2]
   },
 
-  "precipitates": {
-    "num_range": [175, 275],
-    "intensity_range": [5, 35],
-    "size_range": [1, 35],
-    "size_distribution": [4000, 55, 40, 30, 15, 10, 5],
-
-    "emboss_enabled": true,
-    "emboss_intensity_range": [10, 235]
-  },
-
   "etch_pits": {
     "num_range": [1, 6],
     "intensity_range": [100, 135],
@@ -55,6 +45,16 @@
     "texture_blur_range": [0.1, 0.4],
     "texture_intensity_range": [7, 15],
     "texture_size_range": [0, 3]
+  },
+
+  "precipitates": {
+    "num_range": [175, 275],
+    "intensity_range": [5, 35],
+    "size_range": [1, 35],
+    "size_distribution": [4000, 55, 40, 30, 15, 10, 5],
+
+    "emboss_enabled": true,
+    "emboss_intensity_range": [10, 235]
   },
 
   "effects": {
