@@ -144,6 +144,7 @@ class EtchPitsParams:
     num_range: IntRange
     intensity_range: IntRange
     size_range: IntRange
+    layer_offset_ratio: float
 
     shading_dark_shadow: int
     shading_light_shadow: int
@@ -160,6 +161,7 @@ class EtchPitsParams:
             num_range=_as_int_range(d["num_range"], name="etch_pits.num_range"),
             intensity_range=_as_int_range(d["intensity_range"], name="etch_pits.intensity_range"),
             size_range=_as_int_range(d["size_range"], name="etch_pits.size_range"),
+            layer_offset_ratio=float(d.get("layer_offset_ratio", 0.25)),
             shading_dark_shadow=int(d["shading_dark_shadow"]),
             shading_light_shadow=int(d["shading_light_shadow"]),
             shading_highlight=int(d["shading_highlight"]),
