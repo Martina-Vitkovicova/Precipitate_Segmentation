@@ -45,6 +45,7 @@
     "num_range": [1, 6],
     "intensity_range": [100, 135],
     "size_range": [5, 15],
+    "layer_offset_ratio": 0.3,
 
     "shading_dark_shadow": 10,
     "shading_light_shadow": 60,
