@@ -171,7 +171,7 @@ def collect_imgs(root):
 
 
 if __name__ == "__main__":
-    LABELED_DIR = pathlib.Path(r"C:\Users\vitko\Desktop\CVR\Data\labeled_new")
+    LABELED_DIR = pathlib.Path("../../segm/real_data")
     img_paths = list(LABELED_DIR.rglob('img.png'))
 
     analyze_batch(img_paths, corner_frac=0.2)

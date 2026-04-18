@@ -145,7 +145,7 @@ def print_per_image_matrix_stats(root_path):
 if __name__ == "__main__":
     np.set_printoptions(suppress=True, linewidth=120)
 
-    LABELED_DIR = pathlib.Path(r"C:\Users\vitko\Desktop\CVR\Data\labeled_new")
+    LABELED_DIR = pathlib.Path("../../segm/real_data")
 
     print_average_matrix_stats(LABELED_DIR, windows=[14, 30, 55])
     print_per_image_matrix_stats(LABELED_DIR)
