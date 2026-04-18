@@ -215,8 +215,8 @@ def save_outputs(output_dir: Path, count_df, stats: dict):
 
 
 if __name__ == "__main__":
-    root_path = Path(r"C:\Users\vitko\Desktop\CVR\Data\labeled_new")
-    output_dir = Path(r"C:\Users\vitko\Desktop\CVR\Baseline\src\image_analysis\precipitate_stats")
+    root_path = Path("../../segm/real_data")
+    output_dir = Path(r"/precipitate_stats")
 
     count_df = collect_precip_count_per_image(root_path)
     stats = collect_all_stats(root_path)

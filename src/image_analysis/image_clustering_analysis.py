@@ -151,8 +151,8 @@ def plot_clusters_mean_p95(stats_df: pd.DataFrame, out_pdf: str | None = "cluste
 
 
 if __name__ == "__main__":
-    LABELED_DIR = pathlib.Path(r"C:\Users\vitko\Desktop\CVR\Data\labeled_new")
-    STATS_CSV = pathlib.Path(r"/src/image_analysis/matrix_stats/matrix_stats_per_image.csv")
+    LABELED_DIR = pathlib.Path("../../segm/real_data")
+    STATS_CSV = pathlib.Path("matrix_stats/matrix_stats_per_image.csv")
 
     stats_df = compute_or_load_stats(LABELED_DIR, STATS_CSV)
     feature_columns = get_feature_columns(stats_df)
@@ -160,7 +160,7 @@ if __name__ == "__main__":
     evaluate_k_range(stats_df, feature_columns, k_values, seed=12345, standardize=True)
 
     print("\n\n=== Final clustering summary ===\n")
-    FIN_CLUSTERING_PATH = pathlib.Path(r"C:\Users\vitko\Desktop\CVR\Data\labeled_new_divided_me")
+    FIN_CLUSTERING_PATH = pathlib.Path("")
     fin_stats_df = loaded_clustering_stats(FIN_CLUSTERING_PATH, standardize=True)
 
     plot_clusters_mean_p95(fin_stats_df, out_pdf=None)

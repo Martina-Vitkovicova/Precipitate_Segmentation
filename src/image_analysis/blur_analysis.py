@@ -84,7 +84,7 @@ def show_results(mean_blur_map, blur_frequency_map, mean_row_profile, blur_thres
 
 
 if __name__ == "__main__":
-    dataset_dir = Path(r"C:\Users\vitko\Desktop\CVR\Data\labeled_new")
+    dataset_dir = Path("../../segm/real_data")
 
     win = 15
     blur_threshold = 0.70
