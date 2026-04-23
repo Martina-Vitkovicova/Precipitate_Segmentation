@@ -81,12 +81,23 @@ def prepare_master_df(grouped_runs: GroupedData, main_metric: str, config_paths:
 
 def save_main_metric(df: pd.DataFrame, main_metric: str, out_dir: Path, plot: bool = True):
     stats = df.groupby("config")[main_metric].agg(["mean", "std", "max", "min"]).reset_index()
+
+    # most common selected threshold across runs for each config
+    best_thr = (
+        df.assign(threshold=df["threshold"].round(4))
+          .groupby("config")["threshold"]
+          .agg(lambda s: s.mode().min())   # if tie, take the smaller threshold
+          .reset_index(name="Best Threshold")
+    )
+
+    stats = stats.merge(best_thr, on="config", how="left")
+
     stats["Mean (±Std)"] = stats.apply(lambda x: f"{x['mean']:.4f} (±{x['std']:.4f})", axis=1)
-    stats["Stability Gap"] = stats["Stability Gap"] = (stats["max"] - stats["min"]).round(4)
+    stats["Stability Gap"] = (stats["max"] - stats["min"]).round(4)
 
     lb = stats.sort_values("mean", ascending=False).reset_index(drop=True)
 
-    cols = ["config", "Mean (±Std)", "max", "min", "Stability Gap"]
+    cols = ["config", "Best Threshold", "Mean (±Std)", "max", "min", "Stability Gap"]
     lb[cols].rename(columns={"max": "Best", "min": "Worst"}).to_csv(out_dir / "01_leaderboard.csv", index=False)
 
     if plot:
