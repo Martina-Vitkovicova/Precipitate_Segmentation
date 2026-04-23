@@ -68,6 +68,9 @@
 
     "illumination_gradient_enabled": true,
     "illumination_gradient_strength_range": [0.07, 0.1],
-    "illumination_gradient_angle_range": [-50, -30]
+    "illumination_gradient_angle_range": [-50, -30],
+
+    "noise_enabled": true,
+    "noise_amplitude": 0.5
   }
 }

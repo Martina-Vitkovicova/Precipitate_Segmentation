@@ -186,6 +186,9 @@ class EffectsParams:
     illumination_gradient_strength_range: FloatRange
     illumination_gradient_angle_range: IntRange
 
+    noise_enabled: bool
+    noise_amplitude: float
+
     @staticmethod
     def from_dict(d: Dict[str, Any]) -> "EffectsParams":
         return EffectsParams(
@@ -206,6 +209,8 @@ class EffectsParams:
             illumination_gradient_angle_range=_as_int_range(
                 d["illumination_gradient_angle_range"], name="effects.illumination_gradient_angle_range"
             ),
+            noise_enabled=bool(d.get("gaussian_noise_enabled", True)),
+            noise_amplitude=float(d.get("noise_amplitude", 0.5)),
         )
 
 
