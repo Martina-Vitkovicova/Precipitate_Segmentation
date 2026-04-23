@@ -47,7 +47,7 @@ def add_etch_pits(image: Image, etch_pits_rng: RandomState, general_params: Gene
     texture_params = TextureParams(params.texture_density_range, params.texture_blur_range,
                                    params.texture_intensity_range, params.texture_size_range)
 
-    pit_layer_structure = _define_pit_layer_structure()
+    pit_layer_structure = _define_pit_layer_structure(params.layer_offsets, params.layer_scales)
 
     for _ in range(num):
         angle = etch_pits_rng.randint(0, 180)
@@ -58,21 +58,18 @@ def add_etch_pits(image: Image, etch_pits_rng: RandomState, general_params: Gene
 
         pit_layers = _get_pit_layers(centers, base_intensity, pit_layer_structure, params)
         pad_image = _draw_pit(pad_image, etch_pits_rng, size, angle, general_params.light_direction, texture_params,
-                              pit_layers)
+                              pit_layers, params.border_noise)
 
     # crop back to original size
     image = pad_image[pad:pad + h, pad:pad + w]
     return image
 
 
-def _define_pit_layer_structure() -> list[PitLayerStructure]:
-    """Define the shared geometric layout of pit shading layers."""
-    return [
-        PitLayerStructure(name="highlight", offset=0.0, scale=1.00),
-        PitLayerStructure(name="dark_shadow", offset=-1.1, scale=0.85),
-        PitLayerStructure(name="light_shadow", offset=0.75, scale=0.76),
-        PitLayerStructure(name="base_fill", offset=0.0, scale=0.70),
-    ]
+def _define_pit_layer_structure(offsets: dict[str, float] | None = None, scales: dict[str, float] | None = None,
+                                ) -> list[PitLayerStructure]:
+    layer_order = ["highlight", "dark_shadow", "light_shadow", "base_fill"]
+
+    return [PitLayerStructure(name=name, offset=offsets[name], scale=scales[name]) for name in layer_order]
 
 
 def _get_pit_layers(centers: List[Point], base_intensity: int, pit_layer_templates: List[PitLayerStructure],
@@ -134,7 +131,7 @@ def _generate_pit_size(rng: RandomState, size_range: IntRange) -> IntPair:
 
 
 def _draw_pit(image: Image, rng: RandomState, size: IntPair, angle: int, light_dir: Vec3i,
-              texture_params: TextureParams, layers: List[PitLayer],) -> Image:
+              texture_params: TextureParams, layers: List[PitLayer], border_noise: float) -> Image:
     """Draw a single pit from resolved pit layers, then blend it into the image."""
     pit_layers_image = np.zeros_like(image, dtype=np.uint8)
 
@@ -142,7 +139,7 @@ def _draw_pit(image: Image, rng: RandomState, size: IntPair, angle: int, light_d
     # variants of the same base shape.
     base_layer = layers[0]
     base_center = base_layer.center
-    base_contour = _create_pit_shape(image, base_center, angle, size, base_layer.scale, rng)
+    base_contour = _create_pit_shape(image, base_center, angle, size, base_layer.scale, rng, border_noise)
 
     for layer in layers:
         scaled_contour = _scale_contour(base_contour, layer.scale, base_center)
@@ -164,7 +161,8 @@ def _draw_pit(image: Image, rng: RandomState, size: IntPair, angle: int, light_d
     return _merge_pit_into_image(image, textured_pit, mask, size)
 
 
-def _create_pit_shape(image: Image, center: Point, angle: int, size: IntPair, scale: float, rng: RandomState) \
+def _create_pit_shape(image: Image, center: Point, angle: int, size: IntPair, scale: float, rng: RandomState,
+                      border_noise: float) \
         -> Contour:
     """ Create a base pit contour: an ellipse with smooth radial perturbations. """
     temp_shape_mask = np.zeros_like(image, dtype=np.uint8)
@@ -176,7 +174,7 @@ def _create_pit_shape(image: Image, center: Point, angle: int, size: IntPair, sc
     base_contour = contours[0]
 
     avg_size = (size[0] + size[1]) // 2
-    max_noise = avg_size * 0.5
+    max_noise = avg_size * 0.5 * border_noise
     smoothing = max_noise * 0.15
     noise = _generate_smooth_noise(base_contour, center, rng, max_noise, smoothing)
     base_contour = (base_contour.astype(np.int32) + noise).astype(np.int32)

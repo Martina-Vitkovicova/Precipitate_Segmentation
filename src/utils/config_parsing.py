@@ -36,6 +36,12 @@ def _as_int_list(v: Sequence[Any], *, name: str) -> List[int]:
     return [int(x) for x in v]
 
 
+def _as_float_dict(v: Any, *, name: str) -> Dict[str, float]:
+    if not isinstance(v, dict):
+        raise ValueError(f"{name} must be an object/dict")
+    return {str(k): float(val) for k, val in v.items()}
+
+
 @dataclass(frozen=True)
 class GeneralParams:
     image_size: IntPair
@@ -144,7 +150,11 @@ class EtchPitsParams:
     num_range: IntRange
     intensity_range: IntRange
     size_range: IntRange
+
     layer_offset_ratio: float
+    layer_offsets: dict[str, float]
+    layer_scales: dict[str, float]
+    border_noise: float
 
     shading_dark_shadow: int
     shading_light_shadow: int
@@ -157,18 +167,66 @@ class EtchPitsParams:
 
     @staticmethod
     def from_dict(d: Dict[str, Any]) -> "EtchPitsParams":
+        default_layer_offsets = {
+            "highlight": 0.0,
+            "dark_shadow": -1.3,
+            "light_shadow": 0.8,
+            "base_fill": 0.0,
+        }
+
+        default_layer_scales = {
+            "highlight": 1.0,
+            "dark_shadow": 0.8,
+            "light_shadow": 0.75,
+            "base_fill": 0.70,
+        }
+
+        layer_offsets = {
+            **default_layer_offsets,
+            **_as_float_dict(
+                d.get("layer_offsets", {}),
+                name="etch_pits.layer_offsets",
+            ),
+        }
+
+        layer_scales = {
+            **default_layer_scales,
+            **_as_float_dict(
+                d.get("layer_scales", {}),
+                name="etch_pits.layer_scales",
+            ),
+        }
+
         return EtchPitsParams(
             num_range=_as_int_range(d["num_range"], name="etch_pits.num_range"),
             intensity_range=_as_int_range(d["intensity_range"], name="etch_pits.intensity_range"),
             size_range=_as_int_range(d["size_range"], name="etch_pits.size_range"),
+
             layer_offset_ratio=float(d.get("layer_offset_ratio", 0.25)),
+            layer_offsets=layer_offsets,
+            layer_scales=layer_scales,
+            border_noise=float(d.get("border_noise", 0.0)),
+
             shading_dark_shadow=int(d["shading_dark_shadow"]),
             shading_light_shadow=int(d["shading_light_shadow"]),
             shading_highlight=int(d["shading_highlight"]),
-            texture_density_range=_as_float_range(d["texture_density_range"], name="etch_pits.texture_density_range"),
-            texture_blur_range=_as_float_range(d["texture_blur_range"], name="etch_pits.texture_blur_range"),
-            texture_intensity_range=_as_float_range(d["texture_intensity_range"], name="etch_pits.texture_intensity_range"),
-            texture_size_range=_as_int_range(d["texture_size_range"], name="etch_pits.texture_size_range"),
+
+            texture_density_range=_as_float_range(
+                d["texture_density_range"],
+                name="etch_pits.texture_density_range",
+            ),
+            texture_blur_range=_as_float_range(
+                d["texture_blur_range"],
+                name="etch_pits.texture_blur_range",
+            ),
+            texture_intensity_range=_as_float_range(
+                d["texture_intensity_range"],
+                name="etch_pits.texture_intensity_range",
+            ),
+            texture_size_range=_as_int_range(
+                d["texture_size_range"],
+                name="etch_pits.texture_size_range",
+            ),
         )
 
 

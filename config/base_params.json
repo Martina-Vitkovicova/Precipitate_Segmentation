@@ -35,7 +35,21 @@
     "num_range": [1, 6],
     "intensity_range": [100, 135],
     "size_range": [5, 15],
-    "layer_offset_ratio": 0.3,
+
+    "layer_offset_ratio": 0.25,
+    "border_noise": 0.2,
+
+    "layer_offsets": {
+      "highlight": 0.0,
+      "dark_shadow": -2.0,
+      "light_shadow": 1.2,
+      "base_fill": 0.0},
+
+    "layer_scales": {
+      "highlight": 1.0,
+      "dark_shadow": 0.8,
+      "light_shadow": 0.75,
+      "base_fill": 0.65},
 
     "shading_dark_shadow": 10,
     "shading_light_shadow": 60,
