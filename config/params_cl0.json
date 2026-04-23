@@ -32,10 +32,24 @@
   },
 
   "etch_pits": {
-    "num_range": [0, 5],
+    "num_range": [0, 7],
     "intensity_range": [130, 140],
-    "size_range": [8, 22],
-    "layer_offset_ratio": 0.25,
+    "size_range": [8, 25],
+
+    "layer_offset_ratio": 0.2,
+    "border_noise": 0.3,
+
+    "layer_offsets": {
+      "highlight": 0.0,
+      "dark_shadow": -2.0,
+      "light_shadow": -0.5,
+      "base_fill": 0.1},
+
+    "layer_scales": {
+      "highlight": 1.0,
+      "dark_shadow": 0.75,
+      "light_shadow": 0.65,
+      "base_fill": 0.65},
 
     "shading_dark_shadow": 25,
     "shading_light_shadow": 65,
@@ -50,7 +64,7 @@
   "precipitates": {
     "num_range": [60, 180],
     "intensity_range": [10, 35],
-    "size_range": [1, 30],
+    "size_range": [1, 35],
     "size_distribution": [4000, 40, 30, 20, 15, 10, 5],
 
     "emboss_enabled": false,
@@ -68,6 +82,9 @@
 
     "illumination_gradient_enabled": true,
     "illumination_gradient_strength_range": [0.07, 0.1],
-    "illumination_gradient_angle_range": [-48, -32]
+    "illumination_gradient_angle_range": [-48, -32],
+
+    "noise_enabled": true,
+    "noise_amplitude": 0.5
   }
 }

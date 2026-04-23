@@ -5,7 +5,7 @@
   },
 
   "matrix": {
-    "grains_num_range": [30, 80],
+    "grains_num_range": [40, 110],
     "grains_intensity_range": [120, 137],
 
     "border_width": 5,
@@ -22,7 +22,7 @@
     "perlin_noise_scales": [32, 64, 128],
 
     "gaussian_noise_enabled": true,
-    "gaussian_noise_alpha_range": [1, 3],
+    "gaussian_noise_alpha_range": [1, 2],
 
     "porous_texture_enabled": true,
     "porous_texture_density_range": [0.08, 0.18],
@@ -32,14 +32,28 @@
   },
 
   "etch_pits": {
-    "num_range": [0, 6],
+    "num_range": [0, 4],
     "intensity_range": [110, 130],
-    "size_range": [5, 25],
-    "layer_offset_ratio": 0.25,
+    "size_range": [5, 30],
+
+    "layer_offset_ratio": 0.3,
+    "border_noise": 0.2,
+
+    "layer_offsets": {
+      "highlight": 0.0,
+      "dark_shadow": -2.0,
+      "light_shadow": -0.5,
+      "base_fill": 0.1},
+
+    "layer_scales": {
+      "highlight": 1.0,
+      "dark_shadow": 0.75,
+      "light_shadow": 0.65,
+      "base_fill": 0.65},
 
     "shading_dark_shadow": 5,
-    "shading_light_shadow": 50,
-    "shading_highlight": 220,
+    "shading_light_shadow": 60,
+    "shading_highlight": 190,
 
     "texture_density_range": [0.1, 0.15],
     "texture_blur_range": [0.1, 0.2],
@@ -68,6 +82,9 @@
 
     "illumination_gradient_enabled": true,
     "illumination_gradient_strength_range": [0.08, 0.13],
-    "illumination_gradient_angle_range": [-50, -26]
+    "illumination_gradient_angle_range": [-50, -26],
+
+    "noise_enabled": true,
+    "noise_amplitude": 0.5
   }
 }
