@@ -97,7 +97,7 @@ class MatrixParams:
             border_shading_intensity_range=_as_int_range(
                 d.get("border_shading_intensity_range", [75, 185]),
                 name="matrix.border_shading_intensity_range"),
-            border_flat_intensity=int(d.get("border_constant_intensity", 130)),
+            border_flat_intensity=int(d.get("border_flat_intensity", 130)),
 
             perlin_noise_enabled=bool(d["perlin_noise_enabled"]),
             perlin_noise_alpha_range=_as_int_range(d["perlin_noise_alpha_range"], name="matrix.perlin_noise_alpha_range"),
@@ -205,7 +205,7 @@ class EtchPitsParams:
             layer_offset_ratio=float(d.get("layer_offset_ratio", 0.25)),
             layer_offsets=layer_offsets,
             layer_scales=layer_scales,
-            border_noise=float(d.get("border_noise", 0.0)),
+            border_noise=float(d.get("border_noise", 0.3)),
 
             shading_dark_shadow=int(d["shading_dark_shadow"]),
             shading_light_shadow=int(d["shading_light_shadow"]),
@@ -267,7 +267,7 @@ class EffectsParams:
             illumination_gradient_angle_range=_as_int_range(
                 d["illumination_gradient_angle_range"], name="effects.illumination_gradient_angle_range"
             ),
-            noise_enabled=bool(d.get("gaussian_noise_enabled", True)),
+            noise_enabled=bool(d.get("noise_enabled", True)),
             noise_amplitude=float(d.get("noise_amplitude", 0.5)),
         )
 

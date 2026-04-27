@@ -1,7 +1,7 @@
 {
   "general": {
     "image_size": [1024, 1024],
-    "light_direction": [-1, 2, 1]
+    "light_direction": [1, 2, 1]
   },
 
   "matrix": {
