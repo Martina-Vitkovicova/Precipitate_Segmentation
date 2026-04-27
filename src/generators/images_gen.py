@@ -48,7 +48,8 @@ def generate_image(root_seed: int, img_params_path: str) -> Tuple[Image, Mask]:
         image = add_illumination_gradient(image, illum_rng, effects.illumination_gradient_strength_range,
                                           effects.illumination_gradient_angle_range)
 
-    image = add_gaussian_noise(image, gauss_rng)
+    if effects.noise_enabled:
+        image = add_gaussian_noise(image, gauss_rng, effects.noise_amplitude)
     image = np.clip(image, 0.0, 255.0)
 
     return image, mask
@@ -86,13 +87,13 @@ def save_metadata(img_params_path, seed, gen, path):
         json.dump(updated_img_params, file, indent=4)
 
 
-def add_gaussian_noise(image: Image, rng: RandomState) -> Image:
+def add_gaussian_noise(image: Image, rng: RandomState, noise_amplitude: float) -> Image:
     """ Add small zero-mean Gaussian noise to the whole image. """
     h, w = image.shape
     noise = rng.normal(0.0, 1.0, (h, w)).astype(np.float32)
     noise -= float(noise.mean())
 
-    alpha = float(rng.randint(1, 3)) * 0.01
+    alpha = float(rng.randint(1, 3)) * (noise_amplitude / 100.0)
     return image + noise * (alpha * 127.5)
 
 

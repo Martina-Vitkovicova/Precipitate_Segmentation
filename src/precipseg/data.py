@@ -252,7 +252,7 @@ def load_paths(root: Path, n: int | None = None) -> PathPair:
 def load_clustered(synth_root: Path, base_counts: Sequence[int], multiplier: int, prefix: str) -> PathPair:
     img_paths: list[Path] = []
     for i, ratio in enumerate(base_counts):
-        cluster = sorted(synth_root.rglob(f"*{prefix}{i}/img.png"))
+        cluster = sorted(synth_root.rglob(f"*{prefix}{i}/*/img.png"))
         k = ratio * multiplier
         if len(cluster) < k:
             raise ValueError(f"Cluster {i}: requested {k}, found {len(cluster)}")

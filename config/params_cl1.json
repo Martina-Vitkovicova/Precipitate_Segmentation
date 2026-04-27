@@ -1,12 +1,12 @@
 {
   "general": {
     "image_size": [1024, 1024],
-    "light_direction": [-1, 3, 2]
+    "light_direction": [1, 3, 2]
   },
 
   "matrix": {
     "grains_num_range": [50, 85],
-    "grains_intensity_range": [120, 140],
+    "grains_intensity_range": [110, 140],
 
     "border_width": 2,
     "border_variable_width_enabled": true,
@@ -22,7 +22,7 @@
     "perlin_noise_scales": [64, 128, 256],
 
     "gaussian_noise_enabled": true,
-    "gaussian_noise_alpha_range": [1, 3],
+    "gaussian_noise_alpha_range": [1, 2],
 
     "porous_texture_enabled": true,
     "porous_texture_density_range": [0.05, 0.12],
@@ -32,14 +32,28 @@
   },
 
   "etch_pits": {
-    "num_range": [0, 3],
-    "intensity_range": [115, 125],
-    "size_range": [5, 15],
-    "layer_offset_ratio": 0.25,
+    "num_range": [1, 6],
+    "intensity_range": [105, 125],
+    "size_range": [10, 15],
+
+    "layer_offset_ratio": 0.4,
+    "border_noise": 0.2,
+
+    "layer_offsets": {
+      "highlight": 0.0,
+      "dark_shadow": -2.0,
+      "light_shadow": -0.5,
+      "base_fill": 0.1},
+
+    "layer_scales": {
+      "highlight": 1.0,
+      "dark_shadow": 0.75,
+      "light_shadow": 0.65,
+      "base_fill": 0.65},
 
     "shading_dark_shadow": 10,
-    "shading_light_shadow": 35,
-    "shading_highlight": 220,
+    "shading_light_shadow": 45,
+    "shading_highlight": 200,
 
     "texture_density_range": [0.08, 0.13],
     "texture_blur_range": [0.1, 0.4],
@@ -48,7 +62,7 @@
   },
 
   "precipitates": {
-    "num_range": [120, 180],
+    "num_range": [160, 220],
     "intensity_range": [0, 40],
     "size_range": [1, 28],
     "size_distribution": [4000, 40, 30, 25, 20, 15, 10],
@@ -68,6 +82,9 @@
 
     "illumination_gradient_enabled": true,
     "illumination_gradient_strength_range": [0.06, 0.12],
-    "illumination_gradient_angle_range": [-55, -25]
+    "illumination_gradient_angle_range": [-55, -25],
+
+    "noise_enabled": true,
+    "noise_amplitude": 0.5
   }
 }

@@ -1,7 +1,7 @@
 {
   "general": {
     "image_size": [1024, 1024],
-    "light_direction": [-1, 3, 2]
+    "light_direction": [1, 3, 2]
   },
 
   "matrix": {
@@ -34,12 +34,26 @@
   "etch_pits": {
     "num_range": [3, 7],
     "intensity_range": [110, 120],
-    "size_range": [5, 12],
-    "layer_offset_ratio": 0.25,
+    "size_range": [5, 15],
+
+    "layer_offset_ratio": 0.2,
+    "border_noise": 0.3,
+
+    "layer_offsets": {
+      "highlight": 0.0,
+      "dark_shadow": -2.0,
+      "light_shadow": -0.5,
+      "base_fill": 0.1},
+
+    "layer_scales": {
+      "highlight": 1.0,
+      "dark_shadow": 0.75,
+      "light_shadow": 0.65,
+      "base_fill": 0.65},
 
     "shading_dark_shadow": 10,
     "shading_light_shadow": 70,
-    "shading_highlight": 230,
+    "shading_highlight": 210,
 
     "texture_density_range": [0.12, 0.17],
     "texture_blur_range": [0.1, 0.4],
@@ -48,10 +62,10 @@
   },
 
   "precipitates": {
-    "num_range": [100, 170],
+    "num_range": [120, 190],
     "intensity_range": [10, 30],
-    "size_range": [1, 30],
-    "size_distribution": [4000, 50, 20, 30, 30, 20, 10],
+    "size_range": [1, 55],
+    "size_distribution": [1000, 5, 2, 3, 3, 2, 1, 1, 1],
 
     "emboss_enabled": false,
     "emboss_intensity_range": [0, 120]
@@ -68,6 +82,9 @@
 
     "illumination_gradient_enabled": true,
     "illumination_gradient_strength_range": [0.1, 0.16],
-    "illumination_gradient_angle_range": [-50, -38]
+    "illumination_gradient_angle_range": [-50, -38],
+
+    "noise_enabled": true,
+    "noise_amplitude": 0.5
   }
 }
