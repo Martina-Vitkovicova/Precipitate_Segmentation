@@ -261,7 +261,7 @@ def _add_perlin_noise(image: Image, rng: RandomState, row: Coords, col: Coords, 
     res = (image.shape[0] // divisor, image.shape[1] // divisor)
 
     height, width = image.shape
-    noise = generate_perlin_noise_2d((width, height), res, rng=rng)  # range ~ [-1, 1]
+    noise = generate_perlin_noise_2d((height, width), res, rng=rng)  # range ~ [-1, 1]
     noise = noise - noise.mean()
     noise_amplitude = alpha * 127.5
     new_image[row, col] = image[row, col] + noise[row, col] * noise_amplitude
@@ -273,7 +273,7 @@ def _add_gaussian_noise(image: Image, rng: RandomState, row: Coords, col: Coords
                         gaussian_noise_alpha: IntRange) -> Image:
     """ Add zero-mean Gaussian noise inside a region mask. """
     new_image = image.copy()
-    noise = rng.normal(0, 1, (1025, 1025))
+    noise = rng.normal(0, 1, (image.shape[0] + 1, image.shape[1] + 1))
     alpha = rng.randint(*gaussian_noise_alpha) * 0.03
     noise = noise - noise.mean()
     noise_amplitude = alpha * 127.5
