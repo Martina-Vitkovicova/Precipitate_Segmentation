@@ -5,6 +5,7 @@ import numpy as np
 
 from src.utils.config_parsing import GeneralParams, EtchPitsParams, TextureParams
 from src.generators.background_gen import add_porous_texture
+from src.utils.light_dir_normalisation import normalise_light_direction
 from src.utils.type_definitions import RandomState, Image, Vec3i, IntPair, Point, Contour, Mask, IntRange
 
 
@@ -103,18 +104,16 @@ def _generate_centers(rng: RandomState, width: int, height: int, light_dir: Vec3
     """
     center_x, center_y = rng.randint(0, width), rng.randint(0, height)
 
-    light_x, light_y, _ = light_dir
-    light_vec = np.array([light_x, light_y], dtype=np.float32)
-    norm = np.linalg.norm(light_vec) + 1e-6
-    light_vec /= norm
+    light_vec_3d = normalise_light_direction(light_dir)
+    light_vec_2d = light_vec_3d[:2]
 
     # Base displacement magnitude for layer offsets, proportional to the smaller pit axis.
     step = layer_offset_ratio * min(size)
-    step_vec = step * light_vec
+    step_vec = step * light_vec_2d
 
     centers = []
     for layer in layer_structure:
-        offset = layer.offset * step_vec
+        offset = -layer.offset * step_vec
         x = int(round(center_x + float(offset[0])))
         y = int(round(center_y + float(offset[1])))
         centers.append((x, y))

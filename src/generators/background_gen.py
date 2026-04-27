@@ -11,6 +11,7 @@ from scipy.ndimage import distance_transform_edt
 
 from src.utils.config_parsing import GeneralParams, MatrixParams, TextureParams
 from src.generators.finite_voronoi_gen import get_finite_voronoi
+from src.utils.light_dir_normalisation import normalise_light_direction
 from src.utils.type_definitions import (Image, IndexedRegion, Vertices, Edge, Point, RandomState, Coords, BorderMask,
                                         GradientImage, IntPair, IntRange, Vec3i)
 
@@ -216,16 +217,14 @@ def _compute_3d_border_effect(border_mask: BorderMask, rng: RandomState, light_d
                               shading_intensity_range: IntRange) -> GradientImage:
     """ Compute directional shading on borders using a height-map normal approximation. """
     height_map = _get_height_map(border_mask, 1.5)
-    dx, dy = np.gradient(height_map)
+    dy, dx = np.gradient(height_map)
     # dz points perpendicularly away from the surface
     dz = np.ones_like(height_map)
     normals = np.dstack((-dx, -dy, dz))
     norm = np.linalg.norm(normals, axis=2, keepdims=True)
     normals /= norm + 1e-8  # avoid division by zero
 
-    # [x, y, z]: -x -> light from right; y -> light from top; large z -> light from top
-    light_dir = np.array(light_direction)
-    light_dir = light_dir / np.linalg.norm(light_dir)
+    light_dir = normalise_light_direction(light_direction)
 
     # transform the intensity to specified values range
     gradient_shading = np.dot(normals, light_dir).astype(np.float32)

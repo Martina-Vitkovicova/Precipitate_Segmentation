@@ -6,6 +6,7 @@ from numpy.typing import NDArray
 from scipy.interpolate import splprep, splev
 
 from src.utils.config_parsing import GeneralParams, PrecipitatesParams
+from src.utils.light_dir_normalisation import normalise_light_direction
 from src.utils.type_definitions import Image, RandomState, Mask, Contour, IntRange, Vec3i
 
 
@@ -139,10 +140,7 @@ def _compute_gradient_emboss(temp_mask: Mask, size: int, light_direction: Vec3i)
     erosion = max(1, int(size * 0.4))
     temp_mask = cv2.erode(temp_mask, np.ones((erosion, erosion), np.uint8), iterations=1)
 
-    light_dir = np.array(light_direction, dtype=np.float32)
-    light_dir[1] *= -1  # invert axis to match matrix shading
-    light_dir[0] *= -1
-    light_dir /= np.linalg.norm(light_dir) + 1e-8
+    light_dir = normalise_light_direction(light_direction)
 
     depth = 20
     unit_normals = _get_unit_normals(temp_mask, size, depth)
@@ -172,11 +170,11 @@ def _get_unit_normals(temp_mask: Mask, size: int, depth: int) -> NDArray[np.floa
     kernel_size = max(1, (size // 2) | 1)
     temp_mask_blurred = cv2.GaussianBlur(temp_mask.astype(np.float32), (kernel_size, kernel_size), 1.0)
 
-    grad_x, grad_y = np.gradient(temp_mask_blurred)
+    grad_y, grad_x = np.gradient(temp_mask_blurred)
     grad_x, grad_y = grad_x * (depth / 100.0), grad_y * (depth / 100.0)
 
     grad_magnitude = np.sqrt(grad_x ** 2 + grad_y ** 2 + 1.0)
-    unit_normals = np.stack((grad_x / grad_magnitude, grad_y / grad_magnitude, 1.0 / grad_magnitude), axis=0)
+    unit_normals = np.stack((-grad_x / grad_magnitude, -grad_y / grad_magnitude, 1.0 / grad_magnitude), axis=0)
 
     return unit_normals
 
