@@ -150,6 +150,7 @@ class EtchPitsParams:
     num_range: IntRange
     intensity_range: IntRange
     size_range: IntRange
+    layer_offset_ratio: float
 
     layer_offset_ratio: float
     layer_offsets: dict[str, float]
